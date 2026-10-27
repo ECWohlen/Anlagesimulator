@@ -1,0 +1,970 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Anlagesimulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Steuerung links (Schieberegler, Strategie), Ergebnis rechts (Kennzahlen, Verlauf, Vergleich). */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface2:#eaeff5; --fg:#13202f; --muted:#566578; --line:#d6dee9;
+  --accent:#185fa5; --accent-fg:#ffffff;
+  --good:#17794a; --good-bg:#e0f2e9; --warn:#8a5a00; --warn-bg:#fbeecb; --bad:#b3322a; --bad-bg:#fae1de;
+  --c-cash:#8d99ad; --c-bond:#2a78d6; --c-ch:#2e9e6b; --c-world:#157347; --c-em:#8fd0a8; --c-eq:#2e9e6b; --c-immo:#d9822b; --c-gold:#c9a227;
+  --font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1620; --surface:#16202c; --surface2:#1d2937; --fg:#e5ebf2; --muted:#9aa9bb; --line:#2b394a;
+    --accent:#5aa2e6; --accent-fg:#0b1a2a;
+    --good:#4fc58a; --good-bg:#17362a; --warn:#e3b655; --warn-bg:#3a3014; --bad:#f08a7e; --bad-bg:#3d1f1c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1620; --surface:#16202c; --surface2:#1d2937; --fg:#e5ebf2; --muted:#9aa9bb; --line:#2b394a;
+  --accent:#5aa2e6; --accent-fg:#0b1a2a;
+  --good:#4fc58a; --good-bg:#17362a; --warn:#e3b655; --warn-bg:#3a3014; --bad:#f08a7e; --bad-bg:#3d1f1c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14.5px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--surface);z-index:10}
+.in{max-width:1320px;margin-inline:auto;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+.in{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar .in{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px;flex-wrap:wrap}
+h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
+.sub{margin:0;color:var(--muted);font-size:13px}
+.mini{font-family:var(--mono);font-size:13px;color:var(--fg);display:flex;gap:14px;flex-wrap:wrap}
+.mini b{font-weight:500}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-block:16px 32px}
+@media (min-width:960px){
+  .grid{grid-template-columns:372px minmax(0,1fr);align-items:start}
+  aside.ctrl{position:sticky;top:calc(env(safe-area-inset-top,0px) + 112px);max-height:calc(100vh - 128px);overflow:auto}
+}
+aside.ctrl{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+.sec{padding:14px 16px;border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:0}
+.sec h2{margin:0 0 10px;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface2);color:var(--fg);padding:5px 10px;border-radius:999px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.desc{margin:10px 0 0;color:var(--muted);font-size:13px}
+.alloc{display:flex;height:30px;border-radius:6px;overflow:hidden;background:var(--surface2);margin-bottom:8px}
+.alloc span{display:flex;align-items:center;justify-content:center;color:#fff;font-size:11.5px;font-family:var(--mono);overflow:hidden;white-space:nowrap;min-width:0;text-shadow:0 1px 1px rgba(0,0,0,.35)}
+.leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-bottom:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:baseline}
+.srow{margin-bottom:12px}
+.shead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.shead label.nm{font-weight:500}
+.shead output{font-family:var(--mono);font-weight:500;margin-left:auto}
+.shead .amt{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:84px;text-align:right}
+.lk{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--muted);cursor:pointer}
+input[type=range]{width:100%;accent-color:var(--accent);margin:4px 0 0}
+input[type=checkbox]{accent-color:var(--accent)}
+.sub2{margin:14px 0 8px;font-size:12px;color:var(--muted)}
+.fld{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:8px;align-items:center;margin-bottom:8px}
+.fld label{font-size:13px}
+.fld .ctl{display:flex;align-items:center;gap:5px}
+.fld .u{font-size:12px;color:var(--muted);min-width:30px}
+input[type=number],select{font:inherit;font-family:var(--mono);font-size:13px;width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);min-width:0}
+select{font-family:var(--font)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface2);color:var(--fg);padding:5px 11px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.note{font-size:12px;color:var(--muted);margin:6px 0 0}
+details summary{cursor:pointer;font-size:13px;color:var(--accent)}
+.atab{width:100%;border-collapse:collapse;margin:8px 0;font-size:12.5px}
+.atab th{text-align:left;font-weight:500;color:var(--muted);padding:3px 4px}
+.atab td{padding:2px 4px}
+.atab input{padding:3px 5px}
+main.out{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card h2{margin:0 0 4px;font-size:15px;font-weight:600}
+.card p.h{margin:0 0 12px;color:var(--muted);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.kpi{padding:14px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 -1px -1px 0;min-width:0}
+.kpi .l{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:4px}
+.kpi .v{font-family:var(--mono);font-size:21px;font-weight:500;letter-spacing:-.01em}
+.kpi .s{font-size:12.5px;color:var(--muted);margin-top:3px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;margin-left:6px;vertical-align:middle;font-family:var(--font)}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.verdict{padding:12px 14px;border-radius:8px;font-size:14px;border-left:4px solid var(--line);background:var(--surface2)}
+.verdict.good{border-left-color:var(--good);background:var(--good-bg)}
+.verdict.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+.verdict.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+.chartbox{position:relative;height:340px}
+@media (max-width:600px){.chartbox{height:270px}}
+.clegend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.sw{display:inline-block;width:18px;height:9px;border-radius:2px;margin-right:6px;background:var(--accent)}
+.tw{overflow-x:auto}
+table.cmp{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
+.cmp th{font-weight:500;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap}
+.cmp th:first-child{text-align:left}
+.cmp td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmp td:first-child{text-align:left;font-family:var(--font);white-space:normal}
+.cmp tr.me td{background:var(--surface2)}
+.cmp button.nm{font:inherit;font-weight:500;background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-align:left}
+.bar2{display:inline-block;height:8px;border-radius:4px;vertical-align:middle;margin-right:6px;background:var(--accent)}
+.bar2.good{background:var(--good)}.bar2.warn{background:var(--warn)}.bar2.bad{background:var(--bad)}
+.tx{font-size:13px;color:var(--muted)}
+.tx ul{margin:6px 0 0;padding-left:18px}
+.tx li{margin:3px 0}
+footer.in{padding-block:0 28px;font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.tabs{max-width:1320px;margin-inline:auto;display:flex;gap:2px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.tab{font:inherit;font-size:14px;padding:8px 16px;border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);cursor:pointer;margin-bottom:-1px}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{color:var(--fg);font-weight:600;border-bottom-color:var(--accent)}
+#tab-prod{padding-block:16px 32px}
+.pwrap{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ptools{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-top:6px}
+.ptools label{font-size:13px;margin-right:8px}
+.ptools select{width:auto;min-width:230px}
+table.pt{border-collapse:collapse;width:100%;min-width:780px;font-size:13px}
+.pt th{text-align:left;font-weight:500;color:var(--muted);padding:6px 8px;border-bottom:2px solid var(--line);white-space:nowrap}
+.pt th.r{text-align:right}
+.pt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.pt tr.grp td{background:var(--surface2);padding:6px 8px;vertical-align:middle}
+.pt td.l small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+.pt td.l small.flag{color:var(--warn)}
+.pt td.amt,.pt td.num{text-align:right;font-family:var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pt td.tick{font-family:var(--mono);font-size:12px;word-break:break-all;max-width:200px}
+.pt tr.zero td:not(.amt):not(.pc){opacity:.55}
+.pctl{display:flex;align-items:center;gap:8px;min-width:240px}
+.pctl input[type=range]{margin:0;flex:1 1 auto;min-width:80px}
+.pctl input[type=number]{width:70px;flex:none}
+.pctl .u{font-size:12px;color:var(--muted)}
+
+[hidden]{display:none!important}
+.tabs{overflow-x:auto;scrollbar-width:thin}
+.tab{white-space:nowrap}
+.crit{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;margin:14px 0 4px}
+.crit label{font-size:13px}
+.crit select{width:auto;margin-left:6px;padding:4px 6px}
+.dstat{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;color:var(--muted)}
+.dstat .pill{margin-left:0}
+.drow{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:12px}
+.drow .msg{font-size:13px;color:var(--muted)}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn:disabled{opacity:.55;cursor:default}
+.pt td.num{text-align:right}
+.pt small.why{color:var(--warn)}
+.pt a{color:var(--accent)}
+table.pt.cand{min-width:900px}
+.fn{font-size:12.5px;color:var(--muted)}
+.fn ol{margin:6px 0 0;padding-left:20px}
+.fn li{margin:5px 0}
+</style>
+
+<div class="bar"><div class="in">
+  <div><h1>Anlagesimulator</h1><p class="sub">Entnahme und Kapitalverlauf im Ruhestand · Zusatztool zur Rentenplanung Schweiz</p></div>
+  <div class="mini" id="mini" aria-live="polite"></div>
+</div>
+<nav class="tabs" role="tablist" aria-label="Bereiche"><button class="tab" id="tb-sim" role="tab" type="button" aria-selected="true" aria-controls="tab-sim">Simulation</button><button class="tab" id="tb-prod" role="tab" type="button" aria-selected="false" aria-controls="tab-prod">Produkte</button><button class="tab" id="tb-dyn" role="tab" type="button" aria-selected="false" aria-controls="tab-dyn">Dynamische Produkte-Selektion</button></nav>
+</div>
+
+<div class="in grid" id="tab-sim" role="tabpanel" aria-labelledby="tb-sim">
+  <aside class="ctrl" id="ctrl">
+    <div class="sec">
+      <h2>Ausgangslage</h2>
+      <div id="fields"></div>
+      <p class="note">Beispielwerte. Bitte mit Ihren Zahlen aus der Rentenplanung ersetzen: Startkapital = «Verfügbares Kapital» im Tab Szenarien, Zielbudget und Renten = Tab Entnahmeplan.</p>
+    </div>
+    <div class="sec">
+      <h2>Anlagestrategie</h2>
+      <div class="chips" id="chips"></div>
+      <p class="desc" id="sdesc"></p>
+    </div>
+    <div class="sec">
+      <h2>Kapital auf Strategien verteilen</h2>
+      <label class="lk" style="font-size:13px;color:var(--fg);margin-bottom:12px"><input type="checkbox" id="useMix"> Mischung aus mehreren Strategien verwenden</label>
+      <div id="mixRows"></div>
+      <p class="note" id="mixn">Verteilen Sie das Kapital anteilsmässig auf die Strategien. Ein Regler aktiviert die Mischung automatisch, die übrigen Anteile passen sich so an, dass es 100 % bleiben. Die daraus entstehende Gesamtaufteilung sehen Sie darunter.</p>
+    </div>
+    <div class="sec">
+      <h2>Aufteilung des Kapitals</h2>
+      <div class="alloc" id="allocBar" role="img" aria-label="Aufteilung des Kapitals"></div>
+      <div class="leg" id="allocLeg"></div>
+      <div id="groupRows"></div>
+      <div class="srow">
+        <div class="shead"><span class="dot" style="background:var(--c-cash)"></span><label class="nm" for="res">Cash-Reserve in Jahresentnahmen</label><output id="resv"></output></div>
+        <input type="range" id="res" min="0" max="10" step="0.5">
+        <p class="note" id="resn"></p>
+      </div>
+      <p class="sub2">Aufteilung innerhalb der Aktien</p>
+      <div id="splitRows"></div>
+      <p class="note">Wird ein Regler verschoben, passen sich die übrigen Anteile im bisherigen Verhältnis an. Mit «fix» bleibt ein Anteil stehen.</p>
+    </div>
+    <div class="sec">
+      <h2>Entnahme-Regel</h2>
+      <div class="fld"><label for="mode">Entnahme aus</label><select id="mode"><option value="bucket">Cash zuerst, Auffüllen nur nach guten Jahren</option><option value="prop">Anteilig, jährlich rebalancen</option></select></div>
+      <label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="flex"> Flexibel: Entnahme −10 % nach einem Verlustjahr</label>
+      <div class="srow" style="margin-top:12px">
+        <div class="shead"><label class="nm" for="conf">Gewünschte Sicherheit</label><output id="confv"></output></div>
+        <input type="range" id="conf" min="70" max="99" step="1">
+      </div>
+    </div>
+    <div class="sec">
+      <details>
+        <summary>Annahmen und Simulation</summary>
+        <div id="fields2" style="margin-top:10px"></div>
+        <table class="atab"><thead><tr><th>Anlageklasse</th><th>Rendite % nominal</th><th>Schwankung %</th></tr></thead><tbody id="atab"></tbody></table>
+        <div class="fld"><label for="paths">Anzahl Szenarien</label><select id="paths"><option value="1000">1 000</option><option value="2000">2 000</option><option value="5000">5 000</option></select></div>
+        <div class="row"><button class="btn" id="reseed" type="button">Neu würfeln</button><button class="btn" id="reset" type="button">Alles zurücksetzen</button></div>
+      </details>
+    </div>
+  </aside>
+
+  <main class="out">
+    <div class="kpis" id="kpis"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <h2>Kapitalverlauf über alle Marktverläufe</h2>
+      <p class="h">Alle Werte in heutiger Kaufkraft, nach Entnahmen und Kosten.</p>
+      <div class="clegend"><span><i class="sw" style="opacity:1"></i>Median</span><span><i class="sw" style="opacity:.4"></i>mittlere 50 % der Verläufe</span><span><i class="sw" style="opacity:.18"></i>mittlere 80 % der Verläufe</span></div>
+      <div class="chartbox"><canvas id="fan" role="img" aria-label="Kapitalverlauf mit Streuband"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Strategien im Vergleich</h2>
+      <p class="h">Gleiche Marktverläufe, gleiche Entnahme, gleiche Regel. Zeile anklicken, um die Strategie zu laden.</p>
+      <div class="tw"><table class="cmp"><thead><tr><th>Strategie</th><th>Aktien</th><th>Rendite real</th><th>Schwankung</th><th>Kapital reicht (Wahrsch.)</th><th>Median Ende</th><th>Schlechte 10 %</th></tr></thead><tbody id="cmpb"></tbody></table></div>
+    </div>
+    <div class="card tx">
+      <h2 style="color:var(--fg)">So wird gerechnet</h2>
+      <ul>
+        <li>Jedes Jahr werden die Renditen der sieben Anlageklassen gemeinsam zufällig gezogen, mit den eingestellten Erwartungen, Schwankungen und einer festen Korrelationsmatrix. Das ergibt tausende mögliche Marktverläufe.</li>
+        <li>Die Entnahme ist die Lücke zwischen Zielbudget und Renten, wächst mit der Teuerung und wird zu Jahresbeginn bezogen. Rendite und Kosten sind real gerechnet (nominal minus Teuerung minus Kosten).</li>
+        <li>Bei einer Mischung aus mehreren Strategien werden die Anteile zu einer Gesamtaufteilung zusammengerechnet und als ein Portfolio gerechnet, das jährlich auf diese Aufteilung zurückgeführt wird.</li>
+        <li>«Kapital reicht» heisst: In diesem Anteil der Verläufe ist das Kapital bis zum Planungshorizont nicht aufgebraucht.</li>
+        <li>Grenzen: Normalverteilte Jahresrenditen unterschätzen Extremjahre. Steuern auf Ertrag und Vermögen sind im Zielbudget zu berücksichtigen. Renten und Zufluss sind fix real angenommen. Die Renditeannahmen sind Erwartungswerte, keine Prognose.</li>
+        <li>Keine Anlage-, Steuer- oder Rechtsberatung. Orientierungsrechnung.</li>
+      </ul>
+    </div>
+  </main>
+</div>
+<div class="in" id="tab-prod" role="tabpanel" aria-labelledby="tb-prod" hidden>
+  <div class="pwrap">
+    <div class="card">
+      <h2>Produkte der Strategie</h2>
+      <p class="h">Die Anteile folgen der Aufteilung im Tab «Simulation»: <b id="pstrat"></b>. Verschieben Sie hier einen Regler, passt sich die Aufteilung im ersten Tab an und die Simulation rechnet sofort neu.</p>
+      <div class="alloc" id="pbar" role="img" aria-label="Aufteilung nach Produkten"></div>
+      <div class="ptools">
+        <div class="row"><label for="psrc">Produktquelle</label><select id="psrc"><option value="ubs">UBS-Umsetzungsliste</option><option value="etf">ETF-Auswahl nach Risikoprofil</option></select></div>
+        <div class="row" id="ubsctl"><label for="pset">Vorlage</label><select id="pset"><option value="K">Mischung beider UBS-Portfolios</option><option value="D">UBS Allwetter Defensiv</option><option value="C">UBS Index Chancenorientiert</option></select></div>
+        <div class="row" id="etfctl"><label for="etfprof">Risikoprofil</label><select id="etfprof" style="min-width:160px"><option value="auto">Automatisch</option><option value="conservative">Konservativ</option><option value="balanced">Ausgewogen</option><option value="growth">Wachstum</option></select><label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="etfdiv"> Dividendenfokus</label><label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="etfesg"> Nachhaltigkeit (ESG)</label><span class="tx" id="etfnote"></span></div>
+        <div class="row"><span id="psum"></span><button class="btn" id="preset2" type="button">Auf Vorlage zurücksetzen</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tw"><table class="pt"><thead><tr><th>Produkt</th><th>Ticker / ISIN</th><th id="pth-ccy">Währung</th><th>Anteil am Kapital</th><th class="r">Betrag</th></tr></thead><tbody id="pbody"></tbody></table></div>
+    </div>
+    <div class="card tx">
+      <h2 style="color:var(--fg)">Hinweise</h2>
+      <ul>
+        <li>Produkte und Ticker stammen aus der UBS-Umsetzungsliste der Rentenplanung (Portfolios Allwetter Defensiv und Index Chancenorientiert). Ticker und ISIN vor dem Kauf im E-Banking prüfen, die Warnhinweise ⚠ stammen aus der Rentenplanung.</li>
+        <li>Die Produkte sind den sieben Anlageklassen der Simulation zugeordnet: Aktien Europa und USA zählen zu «Aktien Welt», Rohstoffe und Gold zu «Gold / Rohstoffe». Die Summe einer Anlageklasse entspricht immer dem Wert im ersten Tab.</li>
+        <li>ETF-Auswahl: gleiche Logik wie in der Rentenplanung. Je Anlageklasse werden nach Risikoprofil, Planungshorizont, Dividenden- und ESG-Wunsch die günstigsten passenden ETFs gewählt, die Hauptposition erhält 55 %. Mischfonds sind nicht enthalten, weil die Simulation die Klassen einzeln rechnet. Cash läuft über das UBS Sparkonto.</li>
+        <li>Die Vorlage legt fest, wie sich eine Anlageklasse auf ihre Produkte verteilt. Verschieben Sie ein Produkt, bleiben die anderen Produkte derselben Klasse im Betrag unverändert, die übrigen Klassen passen sich proportional an.</li>
+        <li>Die Simulation rechnet mit den Annahmen je Anlageklasse und nicht mit einzelnen Produkten. Produktkosten bilden Sie über «Kosten p. a.» in den Annahmen ab.</li>
+        <li>Keine Anlageberatung. Orientierungsrechnung.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="in" id="tab-dyn" role="tabpanel" aria-labelledby="tb-dyn" hidden>
+  <div class="pwrap">
+    <div class="card">
+      <h2>Dynamische Produkte-Selektion</h2>
+      <p class="h">Aus einem Kandidatenpool wählt ein festes Regelwerk je Anlageklasse das günstigste Produkt, das alle Qualitätsfilter erfüllt. Ändern Sie die Kriterien, wird die Auswahl sofort neu bewertet.</p>
+      <div class="dstat" id="dstat"></div>
+      <div class="crit">
+        <label>Mindest-Fondsgrösse<select id="dc-aum"><option value="100">100 Mio. €</option><option value="250">250 Mio. €</option><option value="500">500 Mio. €</option><option value="1000">1 Mrd. €</option></select></label>
+        <label>Mindestalter<select id="dc-age"><option value="0">egal</option><option value="1">1 Jahr</option><option value="3">3 Jahre</option><option value="5">5 Jahre</option></select></label>
+        <label>Ertragsverwendung<select id="dc-dist"><option value="any">egal</option><option value="thesaurierend">thesaurierend</option><option value="ausschüttend">ausschüttend</option></select></label>
+        <label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="dc-phys"> nur physisch repliziert</label>
+        <label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="dc-je"> Jersey-ETCs zulassen</label>
+        <label class="lk" style="font-size:13px;color:var(--fg)"><input type="checkbox" id="dc-gh"> Gold CHF-abgesichert</label>
+        <button class="btn" id="dc-reset" type="button">Standard-Kriterien</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Gewählte Produkte</h2>
+      <p class="h">Die Anteile folgen dem Tab «Simulation» (<b id="dstrat"></b>). Verschieben Sie hier einen Regler, passt sich die Aufteilung im ersten Tab an.</p>
+      <div class="alloc" id="dbar" role="img" aria-label="Aufteilung nach gewählten Produkten"></div>
+      <div class="ptools"><div id="dsum"></div><button class="btn" id="dreset2" type="button">Auf Auswahl zurücksetzen</button></div>
+      <div class="tw"><table class="pt"><thead><tr><th>Produkt</th><th>ISIN</th><th>Kosten (TER)</th><th>Anteil am Kapital</th><th class="r">Betrag</th></tr></thead><tbody id="dbody"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Kandidaten und Rangfolge</h2>
+      <p class="h">Je Anlageklasse alle geprüften Produkte. Ausgeschlossene Produkte zeigen den Grund.</p>
+      <div class="tw"><table class="pt cand"><thead><tr><th>Rang</th><th>Produkt</th><th class="r">TER</th><th class="r">Fonds (Mio. €)</th><th class="r">Alter</th><th>Domizil</th><th>Replikation</th><th>Ertrag</th><th>Status</th></tr></thead><tbody id="dcand"></tbody></table></div>
+      <div id="dfind" class="tx" style="margin-top:12px"></div>
+    </div>
+    <div class="card fn" id="dfoot">
+      <h2 style="color:var(--fg)">Methodik</h2>
+      <ol>
+        <li><b>Kandidatenpool.</b> Je Anlageklasse gibt es eine feste Liste börsengehandelter Indexprodukte (UCITS-ETF, Schweizer Indexfonds, physische Gold-ETCs). Kennzahlen (TER, Fondsgrösse, Auflagedatum, Domizil, Replikation, Ertragsverwendung, Währungsabsicherung) stammen von Finanzfluss und den Anbieterseiten. Die Fondsgrösse ist in Mio. EUR wie von der Quelle angegeben und gilt bei mehreren Anteilsklassen meist für den ganzen Fonds. Die Datenbasis ist oben mit Datum angegeben.</li>
+        <li><b>Filter.</b> Ein Produkt wird ausgeschlossen, wenn es unter der Mindest-Fondsgrösse oder dem Mindestalter liegt, nicht physisch repliziert ist (abschaltbar), nicht in der Schweiz, Irland oder Luxemburg domiziliert ist (Jersey-ETCs optional), bei Obligationen nicht in CHF oder CHF-abgesichert ist oder die gewählte Ertragsverwendung nicht erfüllt. Gold kann auf CHF-abgesicherte Produkte beschränkt werden.</li>
+        <li><b>Rangfolge.</b> Unter den verbleibenden Produkten gewinnt der tiefste TER, bei Gleichstand der grössere Fonds. Das erste Produkt je Slot wird gewählt. Obligationen bestehen aus zwei Slots (60 % CHF, 40 % Welt CHF-abgesichert). Erfüllt kein Produkt die Kriterien, wird das günstigste ersatzweise gewählt und markiert. Cash bleibt das UBS Sparkonto.</li>
+        <li><b>Zuordnung zu Tab 1.</b> Die Klassensummen entsprechen genau der Aufteilung im Tab «Simulation». Verschieben Sie ein Produkt, bleiben die anderen Produkte der gleichen Klasse im Betrag unverändert und die übrigen Klassen passen sich proportional an.</li>
+        <li><b>Grenzen.</b> Der TER ist nur ein Teil der Kosten, Tracking-Differenz und Handelsspannen fehlen. Ratings (z. B. Morningstar, justETF) werden nicht automatisch abgefragt, Fondsgrösse und Alter dienen als Qualitätsindikatoren. Handelbarkeit an der SIX in CHF, Schweizer Steuerstatus und Verrechnungssteuer sind nicht geprüft. Quelldaten können Fehler enthalten, etwa Auflagedaten neuer Anteilsklassen. Vor jedem Kauf Ticker, ISIN, Kosten und Steuerstatus im E-Banking prüfen. Keine Anlageberatung.</li>
+        <li><b>Aktualisierung.</b> Die Daten werden auf Anfrage in Claude aktualisiert: Kandidaten neu lesen, günstigere Produkte nach den gleichen Kriterien suchen und die Daten in der Datenbank der Seite ersetzen. Die neuen Werte erscheinen danach automatisch, Datum und Stand stehen oben.</li>
+      </ol>
+      <p style="margin:10px 0 0">Quellen: <span id="dsrc"></span></p>
+    </div>
+  </div>
+</div>
+
+<footer class="in">Konzept und Ausgangsdaten: Rentenplanung Schweiz, © Rainer von Arx, Waltenschwil. Alle Rechte vorbehalten. Diagramme: Chart.js (MIT).</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/*ENGINE*/
+var SIM=(function(){
+  var ASSETS=[
+    {k:'cash',n:'Cash / Geldmarkt',mu:1.0,sd:0.6},
+    {k:'bond',n:'Obligationen CHF',mu:1.6,sd:4},
+    {k:'ch',n:'Aktien Schweiz',mu:5.5,sd:15},
+    {k:'world',n:'Aktien Welt',mu:6.0,sd:16},
+    {k:'em',n:'Aktien Schwellenländer',mu:7.0,sd:21},
+    {k:'immo',n:'Immobilienfonds CH',mu:3.5,sd:8},
+    {k:'gold',n:'Gold / Rohstoffe',mu:3.0,sd:15}
+  ];
+  var CORR=[
+    [1,.3,0,0,0,0,0],
+    [.3,1,.1,0,0,.3,.2],
+    [0,.1,1,.85,.65,.5,0],
+    [0,0,.85,1,.8,.5,.05],
+    [0,0,.65,.8,1,.4,.15],
+    [0,.3,.5,.5,.4,1,0],
+    [0,.2,0,.05,.15,0,1]
+  ];
+  var PRESETS=[
+    {id:'vd',name:'Sehr defensiv',w:[15,65,6,8,0,6,0],desc:'Kapitalerhalt im Vordergrund, kaum Aktien. Tiefe Schwankung, real aber kaum Ertrag.'},
+    {id:'ubsd',name:'UBS Allwetter Defensiv',w:[2,46,14,20,5,5,8],desc:'Aus der Anlage-Empfehlung der Rentenplanung: rund 39 % Aktien, viel CHF-Obligationen, Immobilien, Gold und Rohstoffe.'},
+    {id:'b15',name:'Bucket, Horizont 15 Jahre',w:[12,32,12,24,5,8,7],desc:'Cash-Reserve und rund 45 % Aktien im angelegten Teil. Faustregel für einen Anlagehorizont von 15 Jahren.'},
+    {id:'ubsc',name:'UBS Index Chancenorientiert',w:[2,25,32,30,8,0,3],desc:'Aus der Anlage-Empfehlung der Rentenplanung: rund 70 % Aktien, 25 % Obligationen, wenig Cash.'},
+    {id:'b30',name:'Bucket, Horizont 30 Jahre',w:[10,19,18,32,8,8,5],desc:'10 % Cash-Reserve und rund 65 % Aktien im angelegten Teil. Faustregel für einen Anlagehorizont von 30 Jahren.'},
+    {id:'agg',name:'Aktienlastig',w:[5,5,25,50,10,0,5],desc:'Rund 85 % Aktien. Hohe erwartete Rendite, aber auch hohe Schwankung und Sequenzrisiko.'}
+  ];
+  function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  function chol(C){
+    var n=C.length,L=[],i,j,k,s;
+    for(i=0;i<n;i++){L.push(new Array(n).fill(0));}
+    for(i=0;i<n;i++){for(j=0;j<=i;j++){
+      s=C[i][j];for(k=0;k<j;k++)s-=L[i][k]*L[j][k];
+      if(i===j){if(s<=1e-9)return null;L[i][j]=Math.sqrt(s);}else L[i][j]=s/L[j][j];
+    }}
+    return L;
+  }
+  function cholSafe(C){
+    var e=0,L=chol(C);
+    while(!L&&e<0.5){e+=0.02;var D=C.map(function(r,i){return r.map(function(v,j){return i===j?1:v*(1-e);});});L=chol(D);}
+    return L;
+  }
+  function makeShocks(nP,maxY,seed){
+    var L=cholSafe(CORR),rnd=mulberry(seed),E=new Float32Array(nP*maxY*7),z=new Float64Array(7),p,y,i,j,u1,u2,r,t,base,s;
+    for(p=0;p<nP;p++)for(y=0;y<maxY;y++){
+      for(i=0;i<7;i+=2){
+        u1=rnd()||1e-12;u2=rnd();r=Math.sqrt(-2*Math.log(u1));t=2*Math.PI*u2;
+        z[i]=r*Math.cos(t);if(i+1<7)z[i+1]=r*Math.sin(t);
+      }
+      base=(p*maxY+y)*7;
+      for(i=0;i<7;i++){s=0;for(j=0;j<=i;j++)s+=L[i][j]*z[j];E[base+i]=s;}
+    }
+    return E;
+  }
+  function run(w,P,E,o){
+    o=o||{};
+    var nP=P.nP,N=P.N,MY=P.maxY,K=P.K,Wy=o.Wy!=null?o.Wy:P.Wy,mu=P.mu,sd=P.sd,mode=P.mode,flex=P.flex;
+    var V=o.fan?new Float32Array((N+1)*nP):null,ends=new Float64Array(nP),dep=new Int16Array(nP),b=new Float64Array(7),ok=0;
+    var p,y,i,T,d,prevNeg,s,Wd,need,t,r,f,pre,preEq,base,t2,eqRet,rr;
+    for(p=0;p<nP;p++){
+      T=K;for(i=0;i<7;i++)b[i]=K*w[i];
+      if(V)V[p]=K;
+      d=N;prevNeg=false;
+      for(y=0;y<N;y++){
+        if(P.inflow>0&&y===P.inflowY){for(i=0;i<7;i++)b[i]+=P.inflow*w[i];}
+        s=0;for(i=0;i<7;i++)s+=b[i];
+        Wd=Wy*((flex&&prevNeg)?0.9:1);
+        if(s<=Wd){d=y;T=0;break;}
+        if(mode==='bucket'){
+          need=Wd;
+          for(i=0;i<2&&need>0;i++){t=Math.min(b[i],need);b[i]-=t;need-=t;}
+          if(need>0){r=0;for(i=2;i<7;i++)r+=b[i];f=(r-need)/r;for(i=2;i<7;i++)b[i]*=f;}
+        }else{f=(s-Wd)/s;for(i=0;i<7;i++)b[i]*=f;}
+        pre=0;for(i=0;i<7;i++)pre+=b[i];
+        preEq=b[2]+b[3]+b[4];
+        base=(p*MY+y)*7;t2=0;
+        for(i=0;i<7;i++){rr=mu[i]+sd[i]*E[base+i];if(rr<-0.7)rr=-0.7;b[i]*=1+rr;t2+=b[i];}
+        eqRet=preEq>0?(b[2]+b[3]+b[4])/preEq-1:0;
+        prevNeg=t2<pre;
+        if(mode!=='bucket'||eqRet>0){for(i=0;i<7;i++)b[i]=t2*w[i];}
+        T=t2;
+        if(V)V[(y+1)*nP+p]=T;
+      }
+      ends[p]=d<N?0:T;dep[p]=d;if(d>=N)ok++;
+    }
+    var res={succ:ok/nP,ends:ends.slice().sort(),dep:dep.slice().sort()};
+    if(V){
+      res.fan=[];
+      for(y=0;y<=N;y++){
+        var col=V.slice(y*nP,(y+1)*nP).sort();
+        res.fan.push([pct(col,.1),pct(col,.25),pct(col,.5),pct(col,.75),pct(col,.9)]);
+      }
+    }
+    return res;
+  }
+  function pct(a,q){return a[Math.min(a.length-1,Math.floor(q*a.length))];}
+  function stats(w,mu,sd){
+    var m=0,v=0,i,j;
+    for(i=0;i<7;i++)m+=w[i]*mu[i];
+    for(i=0;i<7;i++)for(j=0;j<7;j++)v+=w[i]*w[j]*sd[i]*sd[j]*CORR[i][j];
+    return {mu:m,sd:Math.sqrt(v)};
+  }
+  function safeW(w,P,E,conf){
+    var lo=0,hi=P.K*0.15,i,mid;
+    if(run(w,P,E,{Wy:hi}).succ>=conf)return hi;
+    for(i=0;i<14;i++){mid=(lo+hi)/2;if(run(w,P,E,{Wy:mid}).succ>=conf)lo=mid;else hi=mid;}
+    return lo;
+  }
+  return {ASSETS:ASSETS,CORR:CORR,PRESETS:PRESETS,makeShocks:makeShocks,run:run,pct:pct,stats:stats,safeW:safeW};
+})();
+/*END*/
+</script>
+
+<script>
+(function(){
+'use strict';
+var A=SIM.ASSETS,PRESETS=SIM.PRESETS,MAXY=45,KEY='anlagesimulator_v1';
+var GROUPS=[['cash','Cash / Geldmarkt','var(--c-cash)'],['bond','Obligationen CHF','var(--c-bond)'],['eq','Aktien','var(--c-eq)'],['immo','Immobilienfonds CH','var(--c-immo)'],['gold','Gold / Rohstoffe','var(--c-gold)']];
+var SPLIT=[['ch','Schweiz','var(--c-ch)'],['world','Welt (Industrieländer)','var(--c-world)'],['em','Schwellenländer','var(--c-em)']];
+var COL7=['var(--c-cash)','var(--c-bond)','var(--c-ch)','var(--c-world)','var(--c-em)','var(--c-immo)','var(--c-gold)'];
+var NAME7=['Cash','Obligationen','Aktien CH','Aktien Welt','Aktien EM','Immobilien','Gold'];
+function $(id){return document.getElementById(id);}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function chf(n){return 'CHF '+Math.round(n).toLocaleString('de-CH');}
+function mio(n){return (n/1e6).toFixed(2).replace('.',',')+' Mio';}
+function fv(n){return n>=1e6?mio(n):chf(n);}
+function p1(x){return (x*100).toFixed(1).replace('.',',')+' %';}
+function p0(x){return Math.round(x*100)+' %';}
+function fx(v){return (Math.round(v*10)/10).toString().replace('.',',');}
+
+
+/* ---------- Produkte (UBS-Umsetzungsliste aus der Rentenplanung) ---------- */
+var UBS_PORT=[{"p":"D","cls":"Cash","bau":"Cash CHF","w":2.0,"prod":"UBS Sparkonto / Kontokorrent","tick":"—","ccy":"CHF","flag":""},{"p":"D","cls":"Obligationen CH","bau":"Bonds CHF Corporate","w":30.0,"prod":"iShares Core SBI Foreign AAA-BBB Bond","tick":"CHCORP / CH0105994401","ccy":"CHF","flag":""},{"p":"D","cls":"Obligationen Welt","bau":"Global Short Dur. Real Return","w":8.0,"prod":"iShares Global Inflation Linked Bond CHF Hedged","tick":"SGIL / IE00BVT0MM39","ccy":"CHF (Hedged)","flag":""},{"p":"D","cls":"Obligationen Welt","bau":"Bonds Global ex CHF Aggregate","w":8.0,"prod":"iShares Core Global Aggregate Bond CHF Hedged","tick":"SBCH / IE00BDB76G84","ccy":"CHF (Hedged)","flag":"ISIN prüfen: Die CHF-hedged-Anteilsklasse des iShares Core Global Aggregate Bond wird bei extraETF unter IE00BD1JRY91 geführt."},{"p":"D","cls":"Aktien Schweiz","bau":"Equities Switzerland All Index","w":10.0,"prod":"UBS ETF (CH) - SPI","tick":"CHSPI / CH0131872431","ccy":"CHF","flag":"Ticker/ISIN passen nicht zusammen: CH0131872431 ist der «UBS Core SPI ETF», der Ticker CHSPI gehört zum «iShares Core SPI (CH)» (CH0237935652). Im E-Banking prüfen."},{"p":"D","cls":"Aktien Schweiz","bau":"Ergänzung: Dividenden Schweiz","w":4.0,"prod":"iShares Swiss Dividend ETF (CH)","tick":"CHDVD / CH0237935637","ccy":"CHF","flag":""},{"p":"D","cls":"Aktien Welt","bau":"MSCI World ex Mega Cap","w":9.0,"prod":"Vanguard FTSE Developed World","tick":"V3AA / IE00BK5BX157","ccy":"CHF","flag":""},{"p":"D","cls":"Aktien Welt","bau":"Ergänzung: Dividenden Welt","w":4.0,"prod":"Vanguard FTSE All-World High Dividend Yield (USD) Distributing","tick":"VHYL / IE00B8GKDB10","ccy":"CHF","flag":"USD-Fonds, ausschüttend; TER nicht verifiziert; nicht ESG-gescreent."},{"p":"D","cls":"Aktien Europa","bau":"Equities Europe ex CH","w":5.0,"prod":"iShares Core MSCI Europe ex-CH","tick":"CHEURA / CH0018025251","ccy":"CHF","flag":"ISIN/Ticker vor Kauf im E-Banking prüfen (nicht verifiziert)."},{"p":"D","cls":"Aktien USA","bau":"MSCI World Mega Cap","w":2.0,"prod":"Invesco S&P 500 CHF Hedged","tick":"SP5C / IE00BRKWHL12","ccy":"CHF (Hedged)","flag":""},{"p":"D","cls":"Aktien EM","bau":"Equities Emerging Markets","w":5.0,"prod":"iShares Core MSCI Emerging Markets IMI","tick":"AMEM / IE00BKM4GZ66","ccy":"CHF","flag":""},{"p":"D","cls":"Immobilien CH","bau":"Property Fund - Swiss Mixed Sima","w":5.0,"prod":"UBS \"Sima\" (Fondsanteile direkt an SIX)","tick":"SIMA / CH0014420845","ccy":"CHF","flag":""},{"p":"D","cls":"Rohstoffe","bau":"Index Commodity Fund","w":5.0,"prod":"L&G All Commodities UCITS ETF CHF Hedged","tick":"CCHF / IE00B0496Y93","ccy":"CHF (Hedged)","flag":""},{"p":"D","cls":"Gold","bau":"Gold Index Fund (hedged)","w":3.0,"prod":"ZKB Gold ETF (CHF Hedged)","tick":"ZGLD / CH0139101601","ccy":"CHF (Hedged)","flag":""},{"p":"C","cls":"Cash","bau":"Cash CHF","w":2.0,"prod":"UBS Sparkonto / Kontokorrent","tick":"—","ccy":"CHF","flag":""},{"p":"C","cls":"Obligationen CH","bau":"Index Fund Bonds CHF ESG","w":11.0,"prod":"iShares Core SBI® AAA-CH Bond","tick":"CHBND / CH0118831384","ccy":"CHF","flag":""},{"p":"C","cls":"Obligationen Welt","bau":"Bonds Global ex CHF Aggregate","w":14.0,"prod":"iShares Core Global Aggregate Bond CHF Hedged","tick":"SBCH / IE00BDB76G84","ccy":"CHF (Hedged)","flag":"ISIN prüfen: Die CHF-hedged-Anteilsklasse des iShares Core Global Aggregate Bond wird bei extraETF unter IE00BD1JRY91 geführt."},{"p":"C","cls":"Aktien Schweiz","bau":"Equities Switzerland All Index","w":27.0,"prod":"iShares Core SPI (CH) UCITS ETF","tick":"CHSPI / CH0237935652","ccy":"CHF","flag":""},{"p":"C","cls":"Aktien Schweiz","bau":"Ergänzung: Dividenden Schweiz","w":5.0,"prod":"iShares Swiss Dividend ETF (CH)","tick":"CHDVD / CH0237935637","ccy":"CHF","flag":""},{"p":"C","cls":"Aktien Welt","bau":"Equity World ex CH ESG","w":25.0,"prod":"iShares MSCI World ESG Screened","tick":"IWRD / IE00BFNM3J75","ccy":"CHF","flag":""},{"p":"C","cls":"Aktien Welt","bau":"Ergänzung: Dividenden Welt","w":5.0,"prod":"Vanguard FTSE All-World High Dividend Yield (USD) Distributing","tick":"VHYL / IE00B8GKDB10","ccy":"CHF","flag":"USD-Fonds, ausschüttend; TER nicht verifiziert; nicht ESG-gescreent."},{"p":"C","cls":"Aktien EM","bau":"Emerging Markets Index Fund","w":8.0,"prod":"iShares Core MSCI Emerging Markets IMI","tick":"AMEM / IE00BKM4GZ66","ccy":"CHF","flag":""},{"p":"C","cls":"Gold","bau":"Gold Index Fund (hedged)","w":3.0,"prod":"ZKB Gold ETF (CHF Hedged)","tick":"ZGLD / CH0139101601","ccy":"CHF (Hedged)","flag":""}];
+var CLS7={'Cash':0,'Obligationen CH':1,'Obligationen Welt':1,'Aktien Schweiz':2,'Aktien Welt':3,'Aktien Europa':3,'Aktien USA':3,'Aktien EM':4,'Immobilien CH':5,'Rohstoffe':6,'Gold':6};
+var CLSNAME=['Cash / Geldmarkt','Obligationen','Aktien Schweiz','Aktien Welt','Aktien Schwellenländer','Immobilienfonds CH','Gold / Rohstoffe'];
+var ETF_DB=[{"id":"vwce","name":"Vanguard FTSE All-World UCITS ETF (Acc)","isin":"IE00B3RBWM25","ter":0.22,"type":"equity","regions":["world","usa","europe","em","asia"],"sectors":[],"esg":false,"dist":"acc","desc":"Breites Weltportfolio: ~3 900 Aktien, 50% USA, hohe Diversifikation","profiles":["balanced","growth","aggressive"],"horizon":["medium","long"]},{"id":"iwda","name":"iShares Core MSCI World UCITS ETF (Acc)","isin":"IE00B4L5Y983","ter":0.2,"type":"equity","regions":["world","usa","europe","asia"],"sectors":[],"esg":false,"dist":"acc","desc":"MSCI World: ~1 400 Aktien aus 23 Industrieländern, kein EM","profiles":["balanced","growth","aggressive"],"horizon":["medium","long"]},{"id":"spyl","name":"SPDR S&P 500 UCITS ETF (Acc)","isin":"IE00B6YX5C33","ter":0.03,"type":"equity","regions":["usa"],"sectors":[],"esg":false,"dist":"acc","desc":"S&P 500: 500 grösste US-Unternehmen, tiefste Kosten","profiles":["growth","aggressive"],"horizon":["medium","long"]},{"id":"cspx","name":"iShares Core S&P 500 UCITS ETF (Acc)","isin":"IE00B5BMR087","ter":0.07,"type":"equity","regions":["usa"],"sectors":[],"esg":false,"dist":"acc","desc":"S&P 500 in USD, sehr liquide, gute Replikation","profiles":["growth","aggressive"],"horizon":["medium","long"]},{"id":"vusa","name":"Vanguard S&P 500 UCITS ETF (Dist)","isin":"IE00B3XXRP09","ter":0.07,"type":"equity","regions":["usa"],"sectors":[],"esg":false,"dist":"dist","desc":"S&P 500 mit Ausschüttung — ideal für Entnahmeplan","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"meud","name":"SPDR MSCI Europe UCITS ETF","isin":"IE00B910VR50","ter":0.12,"type":"equity","regions":["europe"],"sectors":[],"esg":false,"dist":"acc","desc":"600 europäische Aktien, breite Diversifikation","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"stoxx","name":"iShares Core EURO STOXX 50 UCITS ETF","isin":"IE0008471009","ter":0.1,"type":"equity","regions":["europe"],"sectors":[],"esg":false,"dist":"dist","desc":"50 grösste Eurozone-Unternehmen, hohe Liquidität","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"cssmi","name":"iShares SMI UCITS ETF (CH)","isin":"CH0008899764","ter":0.35,"type":"equity","regions":["ch"],"sectors":[],"esg":false,"dist":"dist","desc":"20 grösste Schweizer Aktien: Nestlé, Novartis, Roche","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"spi","name":"UBS ETF (CH) SPI (Acc)","isin":"CH0130458182","ter":0.17,"type":"equity","regions":["ch"],"sectors":[],"esg":false,"dist":"acc","desc":"Breiter Schweizer Aktienmarkt (~200 Titel)","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"eimi","name":"iShares Core MSCI EM IMI UCITS ETF (Acc)","isin":"IE00BKM4GZ66","ter":0.18,"type":"equity","regions":["em"],"sectors":[],"esg":false,"dist":"acc","desc":"~2 800 Titel aus Schwellenländern, inkl. Small Caps","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"vfem","name":"Vanguard FTSE Emerging Markets UCITS ETF (Dist)","isin":"IE00B3VVMM84","ter":0.22,"type":"equity","regions":["em"],"sectors":[],"esg":false,"dist":"dist","desc":"Schwellenländer mit Ausschüttung, Vanguard-Qualität","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"ijpa","name":"iShares Core MSCI Japan IMI UCITS ETF (Acc)","isin":"IE00B4L5YX21","ter":0.15,"type":"equity","regions":["asia"],"sectors":[],"esg":false,"dist":"acc","desc":"Breiter japanischer Aktienmarkt","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"aggh","name":"iShares Core Global Aggregate Bond UCITS ETF (EUR Hdg)","isin":"IE00BDBRDM35","ter":0.1,"type":"bond","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"Globale Anleihen (Staaten + Unternehmen), EUR-gesichert","profiles":["conservative","balanced"],"horizon":["short","medium"]},{"id":"xeon","name":"Xtrackers II EUR Overnight Rate Swap UCITS ETF","isin":"LU0290358497","ter":0.1,"type":"bond","regions":["europe"],"sectors":[],"esg":false,"dist":"acc","desc":"Geldmarkt EUR — Parkmöglichkeit bei kurzen Horizonten","profiles":["conservative"],"horizon":["short"]},{"id":"ibts","name":"iShares € Govt Bond 1–3yr UCITS ETF","isin":"IE00B14X4Q57","ter":0.15,"type":"bond","regions":["europe"],"sectors":[],"esg":false,"dist":"dist","desc":"Kurzlaufende Eurostaatsanleihen — stabil, geringe Zinsrisiken","profiles":["conservative","balanced"],"horizon":["short","medium"]},{"id":"iusn","name":"iShares Global Govt Bond UCITS ETF (Acc)","isin":"IE00BYZ28V75","ter":0.2,"type":"bond","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"Globale Staatsanleihen, breite Streuung","profiles":["conservative","balanced"],"horizon":["short","medium"]},{"id":"zgld","name":"UBS ETF (CH) Gold (USD) A-dis","isin":"CH0106027128","ter":0.23,"type":"gold","regions":[],"sectors":["gold"],"esg":false,"dist":"dist","desc":"Physisch hinterlegtes Gold, in der Schweiz eingelagert","profiles":["conservative","balanced","growth"],"horizon":["medium","long"]},{"id":"phgp","name":"Invesco Physical Gold ETC","isin":"IE00B579F325","ter":0.19,"type":"gold","regions":[],"sectors":["gold"],"esg":false,"dist":"acc","desc":"Günstigstes physisch besichertes Gold-ETC in EUR","profiles":["conservative","balanced","growth"],"horizon":["medium","long"]},{"id":"gsco","name":"iShares Diversified Commodity Swap UCITS ETF","isin":"IE00BDFL4P12","ter":0.19,"type":"gold","regions":[],"sectors":[],"esg":false,"dist":"acc","desc":"Breiter Rohstoff-Index (Bloomberg Commodity)","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"iwdp","name":"iShares Developed Markets Property Yield UCITS ETF","isin":"IE00B1FZS350","ter":0.59,"type":"reit","regions":["world"],"sectors":["realestate"],"esg":false,"dist":"dist","desc":"Globale REITs mit Dividendenausschüttung","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"epra","name":"Amundi FTSE EPRA NAREIT Global UCITS ETF (Acc)","isin":"LU1437018838","ter":0.24,"type":"reit","regions":["world"],"sectors":["realestate"],"esg":false,"dist":"acc","desc":"Globale Immobilienaktien und REITs, günstig","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"vnga80","name":"Vanguard LifeStrategy 80% Equity UCITS ETF","isin":"IE00BMVB5R75","ter":0.25,"type":"mixed","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"80% Aktien / 20% Anleihen, automatisches Rebalancing","profiles":["growth","aggressive"],"horizon":["medium","long"]},{"id":"vnga60","name":"Vanguard LifeStrategy 60% Equity UCITS ETF","isin":"IE00BMVB5P51","ter":0.25,"type":"mixed","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"60% Aktien / 40% Anleihen — klassisches ausgewogenes Portfolio","profiles":["balanced"],"horizon":["medium","long"]},{"id":"vnga40","name":"Vanguard LifeStrategy 40% Equity UCITS ETF","isin":"IE00BMVB5N37","ter":0.25,"type":"mixed","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"40% Aktien / 60% Anleihen — defensives Mischportfolio","profiles":["conservative"],"horizon":["short","medium"]},{"id":"qdvd","name":"iShares MSCI World Quality Dividend ESG UCITS ETF","isin":"IE00BYYHSM20","ter":0.38,"type":"equity","regions":["world"],"sectors":["dividend"],"esg":true,"dist":"dist","desc":"Qualitätsdividenden weltweit mit ESG-Filter, stabile Ausschüttungen","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"spyd","name":"SPDR S&P Global Dividend Aristocrats UCITS ETF","isin":"IE00B9CQXS71","ter":0.45,"type":"equity","regions":["world","usa","europe"],"sectors":["dividend"],"esg":false,"dist":"dist","desc":"Dividend Aristocrats: mind. 10 Jahre ununterbrochenes Dividendenwachstum","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"eudv","name":"SPDR S&P Euro Dividend Aristocrats UCITS ETF","isin":"IE00B5M1WJ87","ter":0.3,"type":"equity","regions":["europe"],"sectors":["dividend"],"esg":false,"dist":"dist","desc":"Europäische Dividendenaristokraten, hohe laufende Rendite ~4%","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"tips","name":"iShares $ TIPS UCITS ETF (Acc)","isin":"IE00B1FZSF77","ter":0.1,"type":"bond","regions":["usa"],"sectors":[],"esg":false,"dist":"acc","desc":"US inflationsgeschützte Anleihen (TIPS) — Schutz vor Inflation","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"embd","name":"iShares J.P. Morgan $ EM Bond UCITS ETF","isin":"IE00B2NPKV68","ter":0.45,"type":"bond","regions":["em"],"sectors":[],"esg":false,"dist":"dist","desc":"Schwellenländer-Anleihen in USD, höhere Rendite als Industrieländer","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"xgpx","name":"Xtrackers Portfolio UCITS ETF","isin":"LU0397221945","ter":0.7,"type":"mixed","regions":["world"],"sectors":[],"esg":false,"dist":"acc","desc":"Globales Mischportfolio: Aktien, Anleihen, Immobilien — automatisches Rebalancing","profiles":["conservative","balanced"],"horizon":["short","medium"]},{"id":"gsdy","name":"iShares Gold Producers UCITS ETF","isin":"IE00B6156756","ter":0.55,"type":"gold","regions":["world"],"sectors":["gold"],"esg":false,"dist":"dist","desc":"Gold-Minenproduzenten — gehebelte Goldexposition mit Dividenden","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"iqqh","name":"iShares Global Clean Energy UCITS ETF","isin":"IE00B1XNHC34","ter":0.65,"type":"equity","regions":["world"],"sectors":["energy","infra"],"esg":true,"dist":"dist","desc":"Erneuerbare Energien global — Saubere Infrastruktur mit Dividenden","profiles":["balanced","growth"],"horizon":["long"]},{"id":"zprv","name":"SPDR MSCI Europe Small Cap Value Weighted UCITS ETF","isin":"IE00BSPLC298","ter":0.3,"type":"equity","regions":["europe"],"sectors":[],"esg":false,"dist":"acc","desc":"Europäische Small-Cap-Value-Aktien — Factor-Investing mit Value-Prämie","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"qdve","name":"iShares S&P 500 Information Technology Sector UCITS ETF","isin":"IE00B3WJKG14","ter":0.15,"type":"equity","regions":["usa"],"sectors":["tech"],"esg":false,"dist":"acc","desc":"US-Technologie-Sektor (Apple, Microsoft, Nvidia, etc.)","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"lyms","name":"Amundi MSCI World Information Technology UCITS ETF","isin":"LU1681039261","ter":0.3,"type":"equity","regions":["world"],"sectors":["tech"],"esg":false,"dist":"acc","desc":"Globaler Tech-Sektor","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"qdvh","name":"iShares S&P 500 Health Care Sector UCITS ETF","isin":"IE00B43HR379","ter":0.15,"type":"equity","regions":["usa"],"sectors":["health"],"esg":false,"dist":"acc","desc":"US-Gesundheitssektor (Pharma, Biotech, Med-Devices)","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"hmwo","name":"iShares MSCI World Health Care Sector UCITS ETF","isin":"IE00BYGZVL63","ter":0.25,"type":"equity","regions":["world"],"sectors":["health"],"esg":false,"dist":"acc","desc":"Globaler Gesundheitssektor","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"vhyl","name":"Vanguard FTSE All-World High Dividend Yield UCITS ETF","isin":"IE00B8GKDB10","ter":0.29,"type":"equity","regions":["world"],"sectors":["dividend"],"esg":false,"dist":"dist","desc":"~1 800 dividendenstarke Aktien weltweit — ideal für Entnahme","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"tdiv","name":"VanEck Morningstar Developed Markets Dividend Leaders UCITS ETF","isin":"NL0011683594","ter":0.38,"type":"equity","regions":["world","europe"],"sectors":["dividend"],"esg":false,"dist":"dist","desc":"100 dividendenstarke Aktien aus Industrieländern, hohe Ausschüttung","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"infr","name":"iShares Global Infrastructure UCITS ETF","isin":"IE00B1FZS467","ter":0.65,"type":"equity","regions":["world"],"sectors":["infra"],"esg":false,"dist":"dist","desc":"Infrastruktur global: Versorger, Mautstrassen, Flughäfen","profiles":["conservative","balanced"],"horizon":["medium","long"]},{"id":"suws","name":"UBS MSCI World Socially Responsible UCITS ETF (Acc)","isin":"IE00BK72HJ67","ter":0.22,"type":"equity","regions":["world"],"sectors":[],"esg":true,"dist":"acc","desc":"MSCI World SRI — schliesst Waffen, Tabak, Fossile aus","profiles":["balanced","growth"],"horizon":["medium","long"]},{"id":"esge","name":"iShares MSCI EM ESG Enhanced UCITS ETF","isin":"IE00BFNM3G13","ter":0.18,"type":"equity","regions":["em"],"sectors":[],"esg":true,"dist":"acc","desc":"Schwellenländer mit ESG-Filter","profiles":["growth","aggressive"],"horizon":["long"]},{"id":"vnga60e","name":"Vanguard ESG Global All Cap UCITS ETF (Acc)","isin":"IE00BNG8L278","ter":0.24,"type":"equity","regions":["world"],"sectors":[],"esg":true,"dist":"acc","desc":"Globales Aktienportfolio mit strikten ESG-Kriterien, inkl. Small Caps","profiles":["balanced","growth"],"horizon":["medium","long"]}];
+var PRODS_UBS=[];
+(function(){
+  var idx={};
+  UBS_PORT.forEach(function(r){
+    var key=r.tick+'|'+r.prod,p=idx[key];
+    if(!p){p={id:'p'+PRODS_UBS.length,cls:r.cls,bau:r.bau,prod:r.prod,tick:r.tick,ccy:r.ccy,flag:r.flag||'',k:CLS7[r.cls],D:0,C:0};idx[key]=p;PRODS_UBS.push(p);}
+    p[r.p]=r.w;
+  });
+  PRODS_UBS.sort(function(a,b){return a.k-b.k;});
+})();
+var PRODS=PRODS_UBS;
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function tmplW(p,set){return p.tw!=null?p.tw:(set==='K'?(p.D+p.C)/2:p[set]);}
+function defaultShares(set){
+  var ps={};
+  for(var k=0;k<7;k++){
+    var items=PRODS.filter(function(p){return p.k===k;});if(!items.length)continue;
+    var s=items.reduce(function(a,p){return a+tmplW(p,set);},0),alt=false;
+    if(s<=0){alt=true;s=items.reduce(function(a,p){return a+(p.D+p.C)/2;},0);}
+    items.forEach(function(p){ps[p.id]=s>0?(alt?(p.D+p.C)/2:tmplW(p,set))/s*100:100/items.length;});
+  }
+  return ps;
+}
+
+function etfPick(prof,hz,div,esg,flt,n,eq){
+  var c=ETF_DB.filter(function(e){return flt(e)&&e.profiles.indexOf(prof)>=0&&(e.horizon.indexOf(hz)>=0||e.horizon.indexOf('medium')>=0);});
+  if(!c.length)c=ETF_DB.filter(flt);
+  var broad=function(e){return e.sectors.length===0&&e.regions.indexOf('world')>=0;};
+  var sc=function(e){return (div&&e.sectors.indexOf('dividend')>=0?-10:0)+(esg&&e.esg?-6:0)+(broad(e)?-4:0)+e.ter;};
+  if(eq&&esg){var f=c.filter(function(e){return e.esg||broad(e);});if(f.some(function(e){return e.esg;}))c=f;}
+  return c.slice().sort(function(x,y){return sc(x)-sc(y);}).slice(0,n);
+}
+function etfProfile(){var h=S.horizonAge-S.age;return S.etfProf==='auto'?(h>=25?'growth':h>=12?'balanced':'conservative'):S.etfProf;}
+function prodList(){
+  if(S.psrc!=='etf')return PRODS_UBS;
+  var h=S.horizonAge-S.age,prof=etfProfile(),hz=h>=15?'long':'medium';
+  var out=[{id:'cash0',k:0,prod:'UBS Sparkonto / Kontokorrent',bau:'Cash CHF',tick:'—',ccy:'CHF',flag:'',ter:0,tw:1}];
+  var defs=[
+    [1,function(e){return e.type==='bond';},2,false],
+    [2,function(e){return e.type==='equity'&&e.regions.indexOf('ch')>=0;},1,true],
+    [3,function(e){return e.type==='equity'&&e.regions.length>0&&e.regions.indexOf('ch')<0&&!(e.regions.length===1&&e.regions[0]==='em');},2,true],
+    [4,function(e){return e.type==='equity'&&e.regions.length===1&&e.regions[0]==='em';},1,true],
+    [5,function(e){return e.type==='reit';},1,false],
+    [6,function(e){return e.type==='gold';},1,false]
+  ];
+  defs.forEach(function(d){
+    var ps=etfPick(prof,hz,S.etfDiv,S.etfEsg,d[1],d[2],d[3]);
+    ps.forEach(function(e,i){
+      out.push({id:'e_'+e.id,k:d[0],prod:e.name,bau:e.desc+' · '+(e.dist==='dist'?'ausschüttend':'thesaurierend'),tick:e.isin,ccy:'TER '+e.ter.toFixed(2).replace('.',',')+' %',flag:'',ter:e.ter,tw:ps.length===1?1:(i===0?0.55:0.45/(ps.length-1))});
+    });
+  });
+  return out;
+}
+function prodSig(l){return l.map(function(p){return p.id;}).join();}
+function toGroups(w){
+  var eq=w[2]+w[3]+w[4];
+  return {groups:{cash:w[0],bond:w[1],eq:eq,immo:w[5],gold:w[6]},split:eq>0?{ch:w[2]/eq*100,world:w[3]/eq*100,em:w[4]/eq*100}:{ch:30,world:58,em:12}};
+}
+function mixW(S){var w=[0,0,0,0,0,0,0];PRESETS.forEach(function(p){var s=(S.mix[p.id]||0)/100;for(var i=0;i<7;i++)w[i]+=s*p.w[i]/100;});return w;}
+function wOf(S){
+  if(S.useMix)return mixW(S);
+  var g=S.groups,s=S.split,eq=g.eq;
+  return [g.cash/100,g.bond/100,eq*s.ch/1e4,eq*s.world/1e4,eq*s.em/1e4,g.immo/100,g.gold/100];
+}
+function defaults(){
+  var s={cap:1500000,budget:9000,income:4500,age:65,horizonAge:95,inflow:0,inflowAge:75,infl:1,fee:0.3,paths:2000,seed:7,mode:'bucket',flex:false,conf:90,active:'b30',dcrit:{minAum:250,minAge:3,phys:true,je:false,dist:'any',goldHedge:false},psd:{},psrc:'ubs',etfProf:'auto',etfDiv:false,etfEsg:false,psSet:'K',ps:defaultShares('K'),useMix:false,mix:{vd:0,ubsd:50,b15:0,ubsc:50,b30:0,agg:0},lock:{cash:false,bond:false,eq:false,immo:false,gold:false},mu:A.map(function(a){return a.mu;}),sd:A.map(function(a){return a.sd;})};
+  var pr=PRESETS.filter(function(p){return p.id==='b30';})[0],g=toGroups(pr.w);s.groups=g.groups;s.split=g.split;return s;
+}
+var S=defaults();
+try{
+  var raw=localStorage.getItem(KEY);
+  if(raw){var o=JSON.parse(raw);Object.keys(S).forEach(function(k){if(o[k]!==undefined&&typeof o[k]===typeof S[k])S[k]=o[k];});
+    if(o.active===null)S.active=null;
+    if(['K','D','C'].indexOf(S.psSet)<0)S.psSet='K';
+    if(['ubs','etf'].indexOf(S.psrc)<0)S.psrc='ubs';
+    if(['auto','conservative','balanced','growth'].indexOf(S.etfProf)<0)S.etfProf='auto';
+    PRODS=prodList();
+    S.dcrit=Object.assign({minAum:250,minAge:3,phys:true,je:false,dist:'any',goldHedge:false},S.dcrit);
+    if(!S.psd||typeof S.psd!=='object')S.psd={};
+    if(!S.ps||PRODS.some(function(p){return typeof S.ps[p.id]!=='number';}))S.ps=defaultShares(S.psSet);
+    PRESETS.forEach(function(p){if(typeof S.mix[p.id]!=='number')S.mix[p.id]=0;});
+    if(Math.abs(PRESETS.reduce(function(s,p){return s+S.mix[p.id];},0)-100)>1)S.mix=defaults().mix;
+    if(!Array.isArray(S.mu)||S.mu.length!==7)S.mu=A.map(function(a){return a.mu;});
+    if(!Array.isArray(S.sd)||S.sd.length!==7)S.sd=A.map(function(a){return a.sd;});}
+}catch(e){}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+
+/* ---------- Regler mit verknüpften Anteilen ---------- */
+function round1(x){return Math.round(x*10)/10;}
+function redistribute(obj,keys,k,v,lock){
+  var locked=keys.filter(function(x){return x!==k&&lock&&lock[x];}),free=keys.filter(function(x){return x!==k&&!(lock&&lock[x]);});
+  var ls=locked.reduce(function(s,x){return s+obj[x];},0);
+  v=clamp(v,0,100-ls);
+  if(!free.length)v=100-ls;
+  var rem=100-ls-v,fs=free.reduce(function(s,x){return s+obj[x];},0);
+  free.forEach(function(x){obj[x]=fs>0?obj[x]/fs*rem:rem/free.length;});
+  obj[k]=v;
+  keys.forEach(function(x){obj[x]=round1(obj[x]);});
+  var sum=keys.reduce(function(s,x){return s+obj[x];},0),diff=round1(100-sum);
+  if(diff!==0){var tgt=free.length?free.reduce(function(a,b){return obj[b]>obj[a]?b:a;}):k;obj[tgt]=round1(obj[tgt]+diff);}
+}
+function setGroup(k,v){redistribute(S.groups,GROUPS.map(function(g){return g[0];}),k,v,S.lock);S.active=null;S.useMix=false;}
+function setSplit(k,v){redistribute(S.split,SPLIT.map(function(g){return g[0];}),k,v,null);S.active=null;S.useMix=false;}
+function applyPreset(id){
+  var pr=PRESETS.filter(function(p){return p.id===id;})[0];if(!pr)return;
+  var g=toGroups(pr.w);S.groups=g.groups;S.split=g.split;S.active=id;S.useMix=false;
+}
+
+/* ---------- Aufbau der Bedienelemente ---------- */
+function buildUI(){
+  $('chips').innerHTML=PRESETS.map(function(p){return '<button class="chip" type="button" data-id="'+p.id+'" aria-pressed="false">'+p.name+'</button>';}).join('');
+  $('chips').addEventListener('click',function(e){var b=e.target.closest('.chip');if(b){applyPreset(b.dataset.id);schedule();}});
+  var MIXIDS=PRESETS.map(function(p){return p.id;});
+  $('mixRows').innerHTML=PRESETS.map(function(p){return '<div class="srow"><div class="shead"><label class="nm" for="m-'+p.id+'">'+p.name+'</label><span class="amt" id="ma-'+p.id+'"></span><output id="mv-'+p.id+'"></output></div><input type="range" id="m-'+p.id+'" min="0" max="100" step="5"></div>';}).join('');
+  PRESETS.forEach(function(p){$('m-'+p.id).addEventListener('input',function(e){redistribute(S.mix,MIXIDS,p.id,parseFloat(e.target.value),null);S.useMix=true;S.active=null;schedule();});});
+  $('useMix').addEventListener('change',function(e){S.useMix=e.target.checked;S.active=null;schedule();});
+  $('groupRows').innerHTML=GROUPS.map(function(g){
+    return '<div class="srow"><div class="shead"><span class="dot" style="background:'+g[2]+'"></span><label class="nm" for="g-'+g[0]+'">'+g[1]+'</label><span class="amt" id="ga-'+g[0]+'"></span><output id="gv-'+g[0]+'"></output><label class="lk"><input type="checkbox" id="lk-'+g[0]+'">fix</label></div><input type="range" id="g-'+g[0]+'" min="0" max="100" step="1"></div>';
+  }).join('');
+  $('splitRows').innerHTML=SPLIT.map(function(g){
+    return '<div class="srow"><div class="shead"><span class="dot" style="background:'+g[2]+'"></span><label class="nm" for="s-'+g[0]+'">'+g[1]+'</label><output id="sv-'+g[0]+'"></output></div><input type="range" id="s-'+g[0]+'" min="0" max="100" step="1"></div>';
+  }).join('');
+  GROUPS.forEach(function(g){
+    $('g-'+g[0]).addEventListener('input',function(e){setGroup(g[0],parseFloat(e.target.value));schedule();});
+    $('lk-'+g[0]).addEventListener('change',function(e){S.lock[g[0]]=e.target.checked;persist();});
+  });
+  SPLIT.forEach(function(g){$('s-'+g[0]).addEventListener('input',function(e){setSplit(g[0],parseFloat(e.target.value));schedule();});});
+  $('res').addEventListener('input',function(e){
+    var Wy=Math.max(0,S.budget-S.income)*12;if(Wy<=0||S.cap<=0)return;
+    setGroup('cash',parseFloat(e.target.value)*Wy/S.cap*100);schedule();
+  });
+  $('mode').addEventListener('change',function(e){S.mode=e.target.value;schedule();});
+  $('flex').addEventListener('change',function(e){S.flex=e.target.checked;schedule();});
+  $('conf').addEventListener('input',function(e){S.conf=parseFloat(e.target.value);schedule();});
+  $('paths').addEventListener('change',function(e){S.paths=parseInt(e.target.value,10);schedule();});
+  $('reseed').addEventListener('click',function(){S.seed=S.seed+1;schedule();});
+  $('reset').addEventListener('click',function(){S=defaults();syncInputs();schedule();});
+  var f1=[['cap','Startkapital bei Pensionierung','CHF',10000],['budget','Zielbudget pro Monat','CHF',100],['income','Renten und Einkünfte pro Monat','CHF',100],['age','Alter bei Pensionierung','Jahre',1],['horizonAge','Planungshorizont bis Alter','Jahre',1],['inflow','Späterer Zufluss (z. B. Erbe)','CHF',10000],['inflowAge','Zufluss im Alter','Jahre',1]];
+  var f2=[['infl','Teuerung p. a.','%',0.1],['fee','Kosten (TER, Depot) p. a.','%',0.05]];
+  function mk(list){return list.map(function(f){return '<div class="fld"><label for="n-'+f[0]+'">'+f[1]+'</label><div class="ctl"><input type="number" id="n-'+f[0]+'" step="'+f[3]+'" inputmode="decimal"><span class="u">'+f[2]+'</span></div></div>';}).join('');}
+  $('fields').innerHTML=mk(f1);$('fields2').innerHTML=mk(f2);
+  f1.concat(f2).forEach(function(f){$('n-'+f[0]).addEventListener('input',function(e){var v=parseFloat(e.target.value);if(isFinite(v)){S[f[0]]=v;schedule();}});});
+  $('atab').innerHTML=A.map(function(a,i){return '<tr><td>'+a.n+'</td><td><input type="number" step="0.1" id="mu-'+i+'"></td><td><input type="number" step="0.1" id="sd-'+i+'"></td></tr>';}).join('');
+  A.forEach(function(a,i){
+    $('mu-'+i).addEventListener('input',function(e){var v=parseFloat(e.target.value);if(isFinite(v)){S.mu[i]=v;schedule();}});
+    $('sd-'+i).addEventListener('input',function(e){var v=parseFloat(e.target.value);if(isFinite(v)&&v>=0){S.sd[i]=v;schedule();}});
+  });
+  $('cmpb').addEventListener('click',function(e){var b=e.target.closest('button.nm');if(b&&b.dataset.id){applyPreset(b.dataset.id);schedule();}});
+}
+function syncInputs(){
+  ['cap','budget','income','age','horizonAge','inflow','inflowAge','infl','fee'].forEach(function(k){var el=$('n-'+k);if(document.activeElement!==el)el.value=S[k];});
+  A.forEach(function(a,i){var m=$('mu-'+i),s=$('sd-'+i);if(document.activeElement!==m)m.value=S.mu[i];if(document.activeElement!==s)s.value=S.sd[i];});
+  $('mode').value=S.mode;$('flex').checked=S.flex;$('conf').value=S.conf;$('paths').value=String(S.paths);
+  GROUPS.forEach(function(g){$('lk-'+g[0]).checked=!!S.lock[g[0]];});
+}
+
+/* ---------- Berechnung ---------- */
+var E=null,EKey='',chart=null,pending=false;
+function schedule(){if(!pending){pending=true;requestAnimationFrame(function(){pending=false;update();});}}
+function update(){
+  var N=clamp(Math.round(S.horizonAge-S.age),1,MAXY),Wy=Math.max(0,S.budget-S.income)*12,K=Math.max(0,S.cap);
+  var key=S.paths+'|'+S.seed;
+  if(key!==EKey){E=SIM.makeShocks(S.paths,MAXY,S.seed);EKey=key;}
+  var mu=S.mu.map(function(m){return (m-S.infl-S.fee)/100;}),sd=S.sd.map(function(s){return s/100;});
+  var P={K:K,Wy:Wy,N:N,nP:S.paths,maxY:MAXY,mu:mu,sd:sd,mode:S.mode,flex:S.flex,inflow:S.inflow,inflowY:Math.max(0,Math.round(S.inflowAge-S.age))};
+  var w=wOf(S);
+  if(S.useMix){var gg=toGroups(w.map(function(x){return x*100;}));S.groups=gg.groups;S.split=gg.split;}
+  var main=SIM.run(w,P,E,{fan:true}),st=SIM.stats(w,mu,sd);
+  var confF=S.conf/100,safe=SIM.safeW(w,P,E,confF);
+  var endMed=SIM.pct(main.ends,.5),end10=SIM.pct(main.ends,.1),d10=SIM.pct(main.dep,.1);
+  var rate=K>0?Wy/K:0,succ=main.succ,lvl=succ>=0.9?'good':succ>=0.75?'warn':'bad',lvlT=succ>=0.9?'robust':succ>=0.75?'knapp':'riskant';
+  var gapM=Wy/12,safeM=safe/12;
+
+  /* Kennzahlen */
+  var eqShare=(w[2]+w[3]+w[4]);
+  $('kpis').innerHTML=
+    kpi('Kapital reicht bis Alter '+(S.age+N),Math.round(succ*100)+' %<span class="pill '+lvl+'">'+lvlT+'</span>','in '+Math.round(succ*S.paths).toLocaleString('de-CH')+' von '+S.paths.toLocaleString('de-CH')+' Marktverläufen')+
+    kpi('Median Endkapital',fv(endMed),'schlechte 10 %: '+fv(end10))+
+    kpi('Entnahmequote im 1. Jahr',p1(rate),gapM>0?chf(gapM)+' pro Monat · Faustregel 3 bis 3,5 %':'keine Lücke, Budget durch Renten gedeckt')+
+    kpi('Erwartete Rendite real',p1(st.mu),'Schwankung '+p1(st.sd)+' · Aktien '+p0(eqShare))+
+    kpi('Sichere Entnahme ('+S.conf+' %)',chf(safeM),'pro Monat aus dem Kapital · Bedarf '+chf(gapM))+
+    kpi('Schlechtes Zehntel',d10>=N?'über '+(S.age+N):'Alter '+(S.age+d10),'Kapital reicht höchstens bis dann');
+  var sent;
+  if(gapM<=0)sent='Das Zielbudget von '+chf(S.budget)+' pro Monat ist durch Renten und Einkünfte gedeckt. Das Kapital wird nicht angetastet.';
+  else sent='Bei einer Entnahme von '+chf(gapM)+' pro Monat ('+p1(rate)+' des Kapitals) reicht das Kapital in '+Math.round(succ*100)+' von 100 Marktverläufen bis Alter '+(S.age+N)+'. '+(safeM>=gapM?'Der Bedarf liegt unter der sicheren Entnahme von '+chf(safeM)+' pro Monat ('+S.conf+' % Sicherheit).':'Für '+S.conf+' % Sicherheit wären höchstens '+chf(safeM)+' pro Monat möglich, das sind '+chf(gapM-safeM)+' weniger als geplant.');
+  var vd=$('verdict');vd.className='verdict '+(gapM<=0?'good':lvl);vd.textContent=sent;
+  $('mini').innerHTML='<span>Kapital reicht <b>'+Math.round(succ*100)+' %</b></span><span>Median <b>'+mio(endMed)+'</b></span><span>Quote <b>'+p1(rate)+'</b></span>';
+
+  /* Aufteilung anzeigen */
+  var segs=w.map(function(x,i){return x>0.0005?'<span style="width:'+(x*100)+'%;background:'+COL7[i]+'">'+(x>=0.07?Math.round(x*100)+' %':'')+'</span>':'';}).join('');
+  $('allocBar').innerHTML=segs;
+  $('allocLeg').innerHTML=w.map(function(x,i){return x>0.0005?'<span><i class="dot" style="background:'+COL7[i]+'"></i>'+NAME7[i]+' '+fx(x*100)+' %</span>':'';}).join('');
+  GROUPS.forEach(function(g){
+    var el=$('g-'+g[0]);if(document.activeElement!==el)el.value=S.groups[g[0]];
+    $('gv-'+g[0]).textContent=fx(S.groups[g[0]])+' %';$('ga-'+g[0]).textContent=chf(K*S.groups[g[0]]/100);
+  });
+  SPLIT.forEach(function(g){var el=$('s-'+g[0]);if(document.activeElement!==el)el.value=S.split[g[0]];$('sv-'+g[0]).textContent=fx(S.split[g[0]])+' %';});
+  var resEl=$('res'),R=Wy>0&&K>0?S.groups.cash/100*K/Wy:0;
+  resEl.disabled=!(Wy>0&&K>0);
+  if(document.activeElement!==resEl)resEl.value=Math.min(10,Math.round(R*2)/2);
+  $('resv').textContent=Wy>0?fx(R)+' Jahre':'–';
+  $('resn').textContent=Wy>0?'Cash '+chf(K*S.groups.cash/100)+' entspricht '+fx(R)+' Jahren Entnahme. Mit Obligationen zusammen: '+fx((S.groups.cash+S.groups.bond)/100*K/Wy)+' Jahre.':'Ohne Entnahmelücke braucht es keine Reserve.';
+  var act=S.active,pr=PRESETS.filter(function(p){return p.id===act;})[0];
+  Array.prototype.forEach.call($('chips').children,function(b){b.setAttribute('aria-pressed',b.dataset.id===act?'true':'false');});
+  var mixTxt=PRESETS.filter(function(p){return S.mix[p.id]>0;}).map(function(p){return fx(S.mix[p.id])+' % '+p.name;}).join(', ');
+  $('sdesc').textContent=S.useMix?'Mischung aus '+mixTxt+'. Die Gesamtaufteilung unten ergibt sich daraus. Verschieben Sie dort einen Regler, wird sie zur eigenen Einstellung.':(pr?pr.desc:'Eigene Einstellung: Aufteilung wurde über die Regler verändert.');
+  $('useMix').checked=S.useMix;
+  PRESETS.forEach(function(p){var el=$('m-'+p.id);if(document.activeElement!==el)el.value=S.mix[p.id];$('mv-'+p.id).textContent=fx(S.mix[p.id])+' %';$('ma-'+p.id).textContent=chf(K*S.mix[p.id]/100);});
+  $('mixRows').style.opacity=S.useMix?1:0.55;
+  $('mode').value=S.mode;$('conf').value=S.conf;$('confv').textContent=S.conf+' %';
+  syncInputs();
+
+  renderProd(w,K,S.useMix?'Mischung aus mehreren Strategien':(pr?pr.name:'Eigene Einstellung'));
+
+  renderDyn(w,K,S.useMix?'Mischung aus mehreren Strategien':(pr?pr.name:'Eigene Einstellung'));
+
+  /* Vergleichstabelle */
+  var rows=[];
+  if(!pr){rows.push(cmpRow(null,(S.useMix?'Eigene Mischung':'Eigene Einstellung'),w,main,st,N,true));}
+  PRESETS.forEach(function(p){
+    var pw=p.w.map(function(x){return x/100;}),isMe=p.id===act,r=isMe?main:SIM.run(pw,P,E),s=SIM.stats(pw,mu,sd);
+    rows.push(cmpRow(p.id,p.name,pw,r,s,N,isMe));
+  });
+  $('cmpb').innerHTML=rows.join('');
+
+  drawChart(main.fan,N);
+  persist();
+}
+function kpi(l,v,s){return '<div class="kpi"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
+function cmpRow(id,name,w,r,s,N,me){
+  var lv=r.succ>=0.9?'good':r.succ>=0.75?'warn':'bad';
+  return '<tr class="'+(me?'me':'')+'"><td>'+(id?'<button type="button" class="nm" data-id="'+id+'">'+name+'</button>':'<b>'+name+'</b>')+'</td><td>'+p0(w[2]+w[3]+w[4])+'</td><td>'+p1(s.mu)+'</td><td>'+p1(s.sd)+'</td><td><i class="bar2 '+lv+'" style="width:'+Math.round(r.succ*60)+'px"></i>'+Math.round(r.succ*100)+' %</td><td>'+fv(SIM.pct(r.ends,.5))+'</td><td>'+fv(SIM.pct(r.ends,.1))+'</td></tr>';
+}
+
+
+/* ---------- Tab Produkte ---------- */
+var IDS7=['0','1','2','3','4','5','6'];
+function prodPct(w,p){return w[p.k]*S.ps[p.id];}
+function setProd(id,v){
+  var p=PRODS.filter(function(q){return q.id===id;})[0];if(!p)return;
+  var w=wOf(S).map(function(x){return x*100;}),k=p.k,items=PRODS.filter(function(q){return q.k===k;});
+  var abs={};items.forEach(function(q){abs[q.id]=w[k]*S.ps[q.id]/100;});
+  v=clamp(isFinite(v)?v:0,0,100);
+  var o={};IDS7.forEach(function(i){o[i]=w[+i];});
+  redistribute(o,IDS7,String(k),w[k]-abs[id]+v,null);
+  abs[id]=v;
+  var sum=items.reduce(function(a,q){return a+abs[q.id];},0);
+  if(sum>0)items.forEach(function(q){S.ps[q.id]=abs[q.id]/sum*100;});
+  var gg=toGroups(IDS7.map(function(i){return o[i];}));
+  S.groups=gg.groups;S.split=gg.split;S.active=null;S.useMix=false;
+}
+function buildProd(){
+  var h='',k;
+  for(k=0;k<7;k++){
+    var items=PRODS.filter(function(p){return p.k===k;});if(!items.length)continue;
+    h+='<tr class="grp"><td colspan="3"><span class="dot" style="background:'+COL7[k]+'"></span><b>'+CLSNAME[k]+'</b></td><td class="num" id="pg-'+k+'"></td><td class="amt" id="pga-'+k+'"></td></tr>';
+    items.forEach(function(p){
+      h+='<tr id="pr-'+p.id+'"><td class="l"><b>'+esc(p.prod)+'</b><small>'+esc(p.bau)+'</small>'+(p.flag?'<small class="flag">⚠ '+esc(p.flag)+'</small>':'')+'</td><td class="l tick">'+esc(p.tick)+'</td><td>'+esc(p.ccy)+'</td>'+
+        '<td class="pc"><div class="pctl"><input type="range" id="ps-'+p.id+'" min="0" max="100" step="0.5" aria-label="Anteil '+esc(p.prod)+'"><input type="number" id="pn-'+p.id+'" min="0" max="100" step="0.5" aria-label="Anteil in Prozent"><span class="u">%</span></div></td><td class="amt" id="pa-'+p.id+'"></td></tr>';
+    });
+  }
+  $('pbody').innerHTML=h;
+  PRODS.forEach(function(p){
+    $('ps-'+p.id).addEventListener('input',function(e){setProd(p.id,parseFloat(e.target.value));schedule();});
+    $('pn-'+p.id).addEventListener('input',function(e){var v=parseFloat(e.target.value);if(isFinite(v)){setProd(p.id,v);schedule();}});
+  });
+}
+function initProdControls(){
+  $('pset').addEventListener('change',function(e){S.psSet=e.target.value;S.ps=defaultShares(S.psSet);schedule();});
+  $('preset2').addEventListener('click',function(){S.ps=defaultShares(S.psSet);schedule();});
+  $('psrc').addEventListener('change',function(e){S.psrc=e.target.value;schedule();});
+  $('etfprof').addEventListener('change',function(e){S.etfProf=e.target.value;schedule();});
+  $('etfdiv').addEventListener('change',function(e){S.etfDiv=e.target.checked;schedule();});
+  $('etfesg').addEventListener('change',function(e){S.etfEsg=e.target.checked;schedule();});
+}
+function renderProd(w,K,label){
+  var tot=0,bar='',k,ter=0,etf=S.psrc==='etf',pl=prodList();
+  if(prodSig(pl)!==prodSig(PRODS)){PRODS=pl;S.ps=defaultShares(S.psSet);buildProd();}
+  if(document.activeElement!==$('pset'))$('pset').value=S.psSet;
+  if(document.activeElement!==$('psrc'))$('psrc').value=S.psrc;
+  if(document.activeElement!==$('etfprof'))$('etfprof').value=S.etfProf;
+  $('etfdiv').checked=S.etfDiv;$('etfesg').checked=S.etfEsg;
+  $('ubsctl').hidden=etf;$('etfctl').hidden=!etf;
+  $('pth-ccy').textContent=etf?'Kosten (TER)':'Währung';
+  $('etfnote').textContent=S.etfProf==='auto'?'Profil: '+{conservative:'Konservativ',balanced:'Ausgewogen',growth:'Wachstum'}[etfProfile()]+' (nach Planungshorizont)':'';
+  $('pstrat').textContent=label;
+  PRODS.forEach(function(p){
+    var v=prodPct(w,p),s=$('ps-'+p.id),n=$('pn-'+p.id);
+    tot+=v;ter+=v/100*(p.ter||0);
+    if(document.activeElement!==s)s.value=v;
+    if(document.activeElement!==n)n.value=Math.round(v*10)/10;
+    $('pa-'+p.id).textContent=chf(K*v/100);
+    $('pr-'+p.id).classList.toggle('zero',v<0.05);
+    if(v>=0.05)bar+='<span title="'+esc(p.prod)+': '+fx(v)+' %" style="width:'+v+'%;background:'+COL7[p.k]+';border-left:1px solid var(--surface)">'+(v>=6?Math.round(v)+' %':'')+'</span>';
+  });
+  for(k=0;k<7;k++){var g=$('pg-'+k);if(g){g.textContent=fx(w[k]*100)+' %';$('pga-'+k).textContent=chf(K*w[k]);}}
+  $('pbar').innerHTML=bar;
+  $('psum').innerHTML='<span class="pill '+(Math.abs(tot-100)<0.15?'good':'warn')+'" style="margin:0">Summe '+fx(tot)+' %</span> <span class="tx" style="margin-left:6px">'+chf(K)+(etf?' · Ø TER '+ter.toFixed(2).replace('.',',')+' % p. a. ('+chf(K*ter/100)+')':'')+'</span>';
+}
+/* ---------- Dynamische Produkte-Selektion ---------- */
+var SEL_EMBED={"asOf":"2026-10-27","updatedBy":"Claude (Erstrecherche)","sourceNote":"Finanzfluss ETF-Informer (finanzfluss.de) und Anbieterseiten; Fondsgrösse in Mio. EUR wie von der Quelle angegeben, bei mehreren Anteilsklassen meist für den ganzen Fonds.","slots":[{"id":"ch","k":2,"name":"Aktien Schweiz","share":100,"candidates":[{"isin":"CH0237935652","name":"iShares Core SPI ETF (CH)","ter":0.1,"aumMio":6090,"launch":"2014-04-28","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ch0237935652/","note":""},{"isin":"CH0131872431","name":"UBS Core SPI ETF","ter":0.16,"aumMio":2410,"launch":"2011-07-18","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ch0131872431/","note":""}]},{"id":"world","k":3,"name":"Aktien Welt","share":100,"candidates":[{"isin":"IE00BD4TXV59","name":"UBS Core MSCI World UCITS ETF (USD acc)","ter":0.06,"aumMio":15720,"launch":"2019-06-07","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00bd4txv59/","note":""},{"isin":"IE00BJ0KDQ92","name":"Xtrackers MSCI World UCITS ETF 1C","ter":0.12,"aumMio":27140,"launch":"2014-07-22","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00bj0kdq92/","note":""},{"isin":"IE00B4L5Y983","name":"iShares Core MSCI World UCITS ETF (Acc)","ter":0.2,"aumMio":133210,"launch":"2009-09-25","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00b4l5y983/","note":""},{"isin":"IE000N6LBS91","name":"UBS Core MSCI World UCITS ETF (CHF hedged)","ter":0.09,"aumMio":15720,"launch":"2024-03-12","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/ie000n6lbs91/","note":"CHF-abgesicherte Anteilsklasse, erst seit 2024"},{"isin":"LU3353962601","name":"Xtrackers MSCI World Swap UCITS ETF","ter":0.04,"aumMio":12740,"launch":"2026-06-18","dom":"LU","repl":"synthetisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/lu3353962601/","note":"Auflagedatum und Fondsgrösse laut Quelle auffällig, neue Anteilsklasse"},{"isin":"IE000K8VMPE9","name":"Invesco MSCI World UCITS ETF","ter":0.05,"aumMio":9080,"launch":"2026-09-16","dom":"IE","repl":"synthetisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie000k8vmpe9/","note":"Auflagedatum und Fondsgrösse laut Quelle auffällig, neue Anteilsklasse"}]},{"id":"em","k":4,"name":"Aktien Schwellenländer","share":100,"candidates":[{"isin":"LU0950674175","name":"UBS Core MSCI EM UCITS ETF (USD acc)","ter":0.15,"aumMio":11110,"launch":"2018-06-18","dom":"LU","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/lu0950674175/","note":"Fondsgrösse gilt für den ganzen Fonds"},{"isin":"IE00BKM4GZ66","name":"iShares Core MSCI EM IMI UCITS ETF (Acc)","ter":0.18,"aumMio":41210,"launch":"2014-05-30","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00bkm4gz66/","note":"Index inkl. Small Caps (IMI), breiter als Standard-MSCI-EM"},{"isin":"IE00BTJRMP35","name":"Xtrackers MSCI Emerging Markets UCITS ETF 1C","ter":0.18,"aumMio":13270,"launch":"2017-06-21","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00btjrmp35/","note":""},{"isin":"IE00B3Z3FS74","name":"UBS MSCI Emerging Markets SF UCITS ETF (USD acc)","ter":0.14,"aumMio":155,"launch":"2011-04-27","dom":"IE","repl":"synthetisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00b3z3fs74/","note":""}]},{"id":"bchf","k":1,"name":"Obligationen CHF","share":60,"candidates":[{"isin":"CH0342181887","name":"iShares SBI Screened AAA-BBB Bond Index Fund (CH), Klasse D","ter":0.15,"aumMio":1140,"launch":"2017-02-28","dom":"CH","repl":"physisch","dist":"thesaurierend","hedge":"CHF","url":"https://www.blackrock.com/ch/individual/en/products/287362/ishares-sbi-screened-aaa-bbb-bond-index-fund-ch","note":"Fondsgrösse in CHF; Börsenhandel an der SIX auf der Quelle nicht bestätigt"},{"isin":"LU0879397742","name":"UBS SBI Foreign AAA-BBB 1-5 ESG UCITS ETF (CHF dis)","ter":0.2,"aumMio":815,"launch":"2013-07-30","dom":"LU","repl":"physisch","dist":"ausschüttend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/lu0879397742/","note":""},{"isin":"LU0879399441","name":"UBS SBI Foreign AAA-BBB 5-10 ESG UCITS ETF (CHF dis)","ter":0.2,"aumMio":441,"launch":"2013-07-30","dom":"LU","repl":"physisch","dist":"ausschüttend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/lu0879399441/","note":""},{"isin":"CH0118923892","name":"UBS SBI AAA-BBB ESG ETF","ter":0.15,"aumMio":96,"launch":"2010-11-29","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/ch0118923892/","note":"Fondsgrösse in CHF"}]},{"id":"bglob","k":1,"name":"Obligationen Welt, CHF-abgesichert","share":40,"candidates":[{"isin":"IE00BD1JRY91","name":"iShares Core Global Aggregate Bond UCITS ETF (CHF hedged, Acc)","ter":0.1,"aumMio":12440,"launch":"2018-03-14","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/ie00bd1jry91/","note":"Fondsgrösse gilt für den ganzen Fonds, die CHF-Klasse ist kleiner"},{"isin":"IE00BDBRDM35","name":"iShares Core Global Aggregate Bond UCITS ETF (EUR hedged, Acc)","ter":0.1,"aumMio":12440,"launch":"2017-11-21","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"EUR","url":"https://www.finanzfluss.de/informer/etf/ie00bdbrdm35/","note":""}]},{"id":"immo","k":5,"name":"Immobilienfonds Schweiz","share":100,"candidates":[{"isin":"CH0124758522","name":"UBS SXI Real Estate ETF","ter":0.71,"aumMio":653,"launch":"2011-03-31","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ch0124758522/","note":"Fondsgrösse laut Quelle in EUR umgerechnet"},{"isin":"CH0105994401","name":"UBS SXI Real Estate Funds ETF","ter":0.91,"aumMio":1790,"launch":"2009-11-03","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ch0105994401/","note":""}]},{"id":"gold","k":6,"name":"Gold","share":100,"candidates":[{"isin":"IE00B4ND3602","name":"iShares Physical Gold ETC","ter":0.12,"aumMio":33680,"launch":"2011-04-08","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00b4nd3602/","note":""},{"isin":"IE00B579F325","name":"Invesco Physical Gold A ETC","ter":0.12,"aumMio":26050,"launch":"2009-06-24","dom":"IE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ie00b579f325/","note":""},{"isin":"JE00B588CD74","name":"WisdomTree Physical Swiss Gold","ter":0.15,"aumMio":4660,"launch":"2009-12-16","dom":"JE","repl":"physisch","dist":"thesaurierend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/je00b588cd74/","note":""},{"isin":"CH0106027128","name":"UBS Gold hCHF ETF","ter":0.23,"aumMio":2610,"launch":"2009-12-17","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"CHF","url":"https://www.finanzfluss.de/informer/etf/ch0106027128/","note":""},{"isin":"CH0106027193","name":"UBS Gold ETF","ter":0.23,"aumMio":5200,"launch":"2010-01-06","dom":"CH","repl":"physisch","dist":"ausschüttend","hedge":"keine","url":"https://www.finanzfluss.de/informer/etf/ch0106027193/","note":""}]}],"findings":["Die ISIN CH0105994401 gehört laut Quelle zum UBS SXI Real Estate Funds ETF und nicht zum «iShares Core SBI Foreign AAA-BBB (CHCORP)», wie in der UBS-Liste der Rentenplanung (Allwetter Defensiv, Obligationen CH) hinterlegt.","Der Invesco Physical Gold ETC kostet laut Quelle 0,12 % (ETF-Datenbank der Rentenplanung: 0,19 %).","Der UBS Core MSCI World (USD acc) hat mit 0,06 % einen deutlich tieferen TER als der iShares Core MSCI World mit 0,20 %.","Neue synthetische Welt-ETFs mit Auflagedatum 2026 (Xtrackers, Invesco) fallen durch die Filter Alter und Replikation, obwohl ihr TER tiefer ist."]};
+var SEL=SEL_EMBED,DSTATUS=null,DB=null,PRODS_DYN=[],dynSig='',dynKey='',DSEL=[];
+var DCRIT0={minAum:250,minAge:3,phys:true,je:false,dist:'any',goldHedge:false};
+function selValid(d){
+  return !!d&&typeof d==='object'&&typeof d.asOf==='string'&&Array.isArray(d.slots)&&d.slots.length>0&&d.slots.every(function(s){return s&&typeof s.id==='string'&&typeof s.k==='number'&&s.k>=0&&s.k<=6&&Array.isArray(s.candidates);});
+}
+function nn(x){return typeof x==='number'&&isFinite(x)?x:null;}
+function fmtDate(s){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));return m?m[3]+'.'+m[2]+'.'+m[1]:String(s);}
+function fTer(x){return x===null?'?':x.toFixed(2).replace('.',',')+' %';}
+function evalSlot(slot,cr){
+  var now=Date.now(),rows=slot.candidates.filter(function(c){return c&&typeof c==='object';}).map(function(c){
+    var rs=[],ter=nn(c.ter),aum=nn(c.aumMio),t=Date.parse(c.launch),age=isFinite(t)?(now-t)/(365.25*864e5):null;
+    if(ter===null)rs.push('TER unbekannt');
+    if(aum===null||aum<cr.minAum)rs.push('Fonds kleiner als '+cr.minAum+' Mio.');
+    if(age===null||age<cr.minAge)rs.push('jünger als '+cr.minAge+(cr.minAge===1?' Jahr':' Jahre'));
+    if(cr.phys&&c.repl!=='physisch')rs.push('nicht physisch repliziert');
+    if(['CH','IE','LU'].indexOf(c.dom)<0&&!(cr.je&&c.dom==='JE'))rs.push('Domizil '+String(c.dom));
+    if((slot.id==='bchf'||slot.id==='bglob')&&c.hedge!=='CHF')rs.push('nicht CHF-abgesichert');
+    if(slot.id==='gold'&&cr.goldHedge&&c.hedge!=='CHF')rs.push('nicht CHF-abgesichert');
+    if(cr.dist!=='any'&&c.dist!==cr.dist)rs.push('Ertrag '+String(c.dist));
+    return {c:c,ter:ter,aum:aum,age:age,rs:rs,ok:rs.length===0};
+  });
+  var by=function(a,b){return (a.ter===null?99:a.ter)-(b.ter===null?99:b.ter)||(b.aum||0)-(a.aum||0);};
+  var good=rows.filter(function(r){return r.ok;}).sort(by),bad=rows.filter(function(r){return !r.ok;}).sort(function(a,b){return a.rs.length-b.rs.length||by(a,b);});
+  good.forEach(function(r,i){r.rank=i+1;});
+  var fb=null;if(!good.length){fb=bad.filter(function(r){return r.ter!==null;})[0]||null;}
+  return {slot:slot,rows:good.concat(bad),pick:good[0]||null,fallback:fb};
+}
+function evalDyn(){
+  var cr=S.dcrit;
+  DSEL=SEL.slots.map(function(s){return evalSlot(s,cr);});
+  var out=[{id:'dcash',k:0,prod:'UBS Sparkonto / Kontokorrent',bau:'Cash CHF · Sparkonto',tick:'—',ter:null,tw:1,url:''}];
+  DSEL.forEach(function(e){
+    var r=e.pick||e.fallback;if(!r)return;var c=r.c;
+    out.push({id:'d_'+String(c.isin),k:e.slot.k,prod:String(c.name),bau:String(e.slot.name)+' · '+String(c.repl)+', '+String(c.dist)+(r.ok?'':' · erfüllt die Kriterien nicht'),tick:String(c.isin),ter:r.ter,tw:nn(e.slot.share)||100,url:String(c.url||''),warn:!r.ok});
+  });
+  out.sort(function(a,b){return a.k-b.k;});
+  return out;
+}
+function dynShares(list){
+  var ps={},sum={};
+  list.forEach(function(p){sum[p.k]=(sum[p.k]||0)+p.tw;});
+  list.forEach(function(p){ps[p.id]=p.tw/sum[p.k]*100;});
+  return ps;
+}
+function setProdIn(list,ps,id,v){
+  var p=list.filter(function(q){return q.id===id;})[0];if(!p)return;
+  var w=wOf(S).map(function(x){return x*100;}),k=p.k,items=list.filter(function(q){return q.k===k;});
+  var abs={};items.forEach(function(q){abs[q.id]=w[k]*ps[q.id]/100;});
+  v=clamp(isFinite(v)?v:0,0,100);
+  var o={};IDS7.forEach(function(i){o[i]=w[+i];});
+  redistribute(o,IDS7,String(k),w[k]-abs[id]+v,null);
+  abs[id]=v;
+  var sum=items.reduce(function(a,q){return a+abs[q.id];},0);
+  if(sum>0)items.forEach(function(q){ps[q.id]=abs[q.id]/sum*100;});
+  var gg=toGroups(IDS7.map(function(i){return o[i];}));
+  S.groups=gg.groups;S.split=gg.split;S.active=null;S.useMix=false;
+}
+function buildDyn(){
+  var h='',k;
+  for(k=0;k<7;k++){
+    var items=PRODS_DYN.filter(function(p){return p.k===k;});if(!items.length)continue;
+    h+='<tr class="grp"><td colspan="3"><span class="dot" style="background:'+COL7[k]+'"></span><b>'+CLSNAME[k]+'</b></td><td class="num" id="dpg-'+k+'"></td><td class="amt" id="dpga-'+k+'"></td></tr>';
+    items.forEach(function(p,ix){
+      var src=/^https:\/\//.test(p.url)?'<small><a href="'+esc(p.url)+'" target="_blank" rel="noopener">Quelle</a></small>':'';
+      h+='<tr id="dpr-'+ix+'-'+k+'"><td class="l"><b>'+esc(p.prod)+'</b><small>'+esc(p.bau)+'</small>'+(p.warn?'<small class="flag">⚠ Kein Produkt erfüllt die Kriterien, günstigstes ersatzweise gewählt.</small>':'')+src+'</td><td class="l tick">'+esc(p.tick)+'</td><td>'+(p.ter===null?'–':fTer(p.ter))+'</td>'+
+        '<td class="pc"><div class="pctl"><input type="range" id="dps-'+ix+'-'+k+'" min="0" max="100" step="0.5" aria-label="Anteil '+esc(p.prod)+'"><input type="number" id="dpn-'+ix+'-'+k+'" min="0" max="100" step="0.5" aria-label="Anteil in Prozent"><span class="u">%</span></div></td><td class="amt" id="dpa-'+ix+'-'+k+'"></td></tr>';
+      p._ix=ix+'-'+k;
+    });
+  }
+  $('dbody').innerHTML=h;
+  PRODS_DYN.forEach(function(p){
+    $('dps-'+p._ix).addEventListener('input',function(e){setProdIn(PRODS_DYN,S.psd,p.id,parseFloat(e.target.value));schedule();});
+    $('dpn-'+p._ix).addEventListener('input',function(e){var v=parseFloat(e.target.value);if(isFinite(v)){setProdIn(PRODS_DYN,S.psd,p.id,v);schedule();}});
+  });
+}
+function renderDynCands(){
+  var h='';
+  DSEL.forEach(function(e){
+    h+='<tr class="grp"><td colspan="9"><span class="dot" style="background:'+COL7[e.slot.k]+'"></span><b>'+esc(e.slot.name)+'</b>'+(nn(e.slot.share)&&nn(e.slot.share)<100?' <span class="tx">Anteil in der Klasse '+e.slot.share+' %</span>':'')+'</td></tr>';
+    e.rows.forEach(function(r){
+      var c=r.c,st;
+      if(r.ok)st=r.rank===1?'<span class="pill good" style="margin:0">gewählt</span>':'Rang '+r.rank;
+      else st=(e.fallback===r?'<span class="pill warn" style="margin:0">Ersatz</span> ':'')+'<small class="why">ausgeschlossen: '+esc(r.rs.join('; '))+'</small>';
+      var lnk=/^https:\/\//.test(String(c.url||''))?' <a href="'+esc(c.url)+'" target="_blank" rel="noopener">Quelle</a>':'';
+      h+='<tr><td>'+(r.ok?r.rank:'–')+'</td><td class="l"><b>'+esc(c.name)+'</b><small>'+esc(c.isin)+lnk+(c.note?' · '+esc(c.note):'')+'</small></td><td class="num">'+fTer(r.ter)+'</td><td class="num">'+(r.aum===null?'?':Math.round(r.aum).toLocaleString('de-CH'))+'</td><td class="num">'+(r.age===null?'?':r.age.toFixed(1).replace('.',',')+' J.')+'</td><td>'+esc(c.dom)+'</td><td>'+esc(c.repl)+'</td><td>'+esc(c.dist)+(c.hedge&&c.hedge!=='keine'?' · '+esc(c.hedge)+'-hedged':'')+'</td><td class="l">'+st+'</td></tr>';
+    });
+  });
+  $('dcand').innerHTML=h;
+  var urls={};SEL.slots.forEach(function(s){s.candidates.forEach(function(c){if(c&&/^https:\/\//.test(String(c.url||''))){var m=/^https:\/\/([^\/]+)/.exec(c.url);urls[m[1].replace(/^www\./,'')]=c.url;}});});
+  $('dsrc').innerHTML=Object.keys(urls).map(function(d){return '<a href="'+esc(urls[d])+'" target="_blank" rel="noopener">'+esc(d)+'</a>';}).join(', ');
+  var f=Array.isArray(SEL.findings)?SEL.findings:[];
+  $('dfind').innerHTML=f.length?'<b>Auffälligkeiten in den Daten</b><ul>'+f.slice(0,10).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>':'';
+}
+function renderDynStatus(){
+  var ageD=Math.floor((Date.now()-Date.parse(SEL.asOf))/864e5),lv=ageD<=45?'good':ageD<=90?'warn':'bad',lt=ageD<=45?'aktuell':ageD<=90?'bald veraltet':'veraltet';
+  var by=SEL.updatedBy?' · '+esc(SEL.updatedBy):'';
+  var st='';
+  if(DSTATUS&&typeof DSTATUS==='object'){
+    if(DSTATUS.state==='done'&&DSTATUS.changes)st='<span>Letzte Aktualisierung: '+esc(String(DSTATUS.changes).slice(0,240))+'</span>';
+    else if(DSTATUS.state==='error')st='<span>Letzte Aktualisierung fehlgeschlagen: '+esc(String(DSTATUS.message||'').slice(0,160))+'</span>';
+  }
+  $('dstat').innerHTML='<span>Stand der Daten: <b>'+esc(fmtDate(SEL.asOf))+'</b> (vor '+(isFinite(ageD)?ageD:'?')+' Tagen)</span><span class="pill '+lv+'">'+lt+'</span><span>'+(SEL===SEL_EMBED?'Daten aus der Veröffentlichung':'Daten aus der Datenbank')+by+'</span>'+st;
+}
+function renderDyn(w,K,label){
+  S.dcrit=Object.assign({},DCRIT0,S.dcrit);
+  var cr=S.dcrit,key=JSON.stringify([cr,SEL.asOf,SEL.slots.length,SEL===SEL_EMBED]);
+  var list=evalDyn(),sig=list.map(function(p){return p.id;}).join();
+  if(sig!==dynSig||key!==dynKey){
+    var changed=sig!==dynSig;
+    PRODS_DYN=list;
+    if(changed||!S.psd||PRODS_DYN.some(function(p){return typeof S.psd[p.id]!=='number';}))S.psd=dynShares(PRODS_DYN);
+    dynSig=sig;dynKey=key;buildDyn();renderDynCands();
+  }
+  renderDynStatus();
+  $('dstrat').textContent=label;
+  var tot=0,ter=0,bar='',k;
+  PRODS_DYN.forEach(function(p){
+    var v=w[p.k]*S.psd[p.id],s=$('dps-'+p._ix),n=$('dpn-'+p._ix);
+    tot+=v;ter+=v/100*(p.ter||0);
+    if(document.activeElement!==s)s.value=v;
+    if(document.activeElement!==n)n.value=Math.round(v*10)/10;
+    $('dpa-'+p._ix).textContent=chf(K*v/100);
+    if(v>=0.05)bar+='<span title="'+esc(p.prod)+': '+fx(v)+' %" style="width:'+v+'%;background:'+COL7[p.k]+';border-left:1px solid var(--surface)">'+(v>=6?Math.round(v)+' %':'')+'</span>';
+  });
+  for(k=0;k<7;k++){var g=$('dpg-'+k);if(g){g.textContent=fx(w[k]*100)+' %';$('dpga-'+k).textContent=chf(K*w[k]);}}
+  $('dbar').innerHTML=bar;
+  $('dsum').innerHTML='<span class="pill '+(Math.abs(tot-100)<0.15?'good':'warn')+'" style="margin:0">Summe '+fx(tot)+' %</span> <span class="tx" style="margin-left:6px">'+chf(K)+' · Ø TER '+ter.toFixed(2).replace('.',',')+' % p. a. ('+chf(K*ter/100)+')</span>';
+  ['aum','age','dist'].forEach(function(n){var el=$('dc-'+n);if(document.activeElement!==el)el.value=String(n==='aum'?cr.minAum:n==='age'?cr.minAge:cr.dist);});
+  $('dc-phys').checked=!!cr.phys;$('dc-je').checked=!!cr.je;$('dc-gh').checked=!!cr.goldHedge;
+}
+function initDynControls(){
+  $('dc-aum').addEventListener('change',function(e){S.dcrit.minAum=parseFloat(e.target.value);schedule();});
+  $('dc-age').addEventListener('change',function(e){S.dcrit.minAge=parseFloat(e.target.value);schedule();});
+  $('dc-dist').addEventListener('change',function(e){S.dcrit.dist=e.target.value;schedule();});
+  $('dc-phys').addEventListener('change',function(e){S.dcrit.phys=e.target.checked;schedule();});
+  $('dc-je').addEventListener('change',function(e){S.dcrit.je=e.target.checked;schedule();});
+  $('dc-gh').addEventListener('change',function(e){S.dcrit.goldHedge=e.target.checked;schedule();});
+  $('dc-reset').addEventListener('click',function(){S.dcrit=Object.assign({},DCRIT0);schedule();});
+  $('dreset2').addEventListener('click',function(){S.psd=dynShares(PRODS_DYN);schedule();});
+}
+async function initDyn(){
+  try{if(!(window.claude&&claude.use))return;DB=await claude.use('db');}catch(e){DB=null;}
+  if(!DB)return;
+  try{
+    DB.doc('selection/current').onSnapshot(function(s){
+      if(!s.exists)return;var d=s.data();
+      if(selValid(d)&&String(d.asOf)>=SEL_EMBED.asOf){SEL=d;schedule();}
+    },function(){});
+    DB.doc('selection/status').onSnapshot(function(s){DSTATUS=s.exists?s.data():null;schedule();},function(){});
+  }catch(e){}
+}
+var TABS={simulation:['tb-sim','tab-sim'],produkte:['tb-prod','tab-prod'],selektion:['tb-dyn','tab-dyn']};
+function tabFromHash(){var h=String(location.hash||'').replace('#','');return TABS[h]?h:'simulation';}
+function showTab(n,noHash){
+  if(!TABS[n])n='simulation';
+  Object.keys(TABS).forEach(function(t){$(TABS[t][1]).hidden=t!==n;$(TABS[t][0]).setAttribute('aria-selected',t===n?'true':'false');});
+  if(!noHash){try{location.hash='#'+n;}catch(e){}window.scrollTo(0,0);}
+  if(n==='simulation'&&chart)chart.resize();
+}
+function initTabs(){
+  Object.keys(TABS).forEach(function(t){$(TABS[t][0]).addEventListener('click',function(){showTab(t);});});
+  window.addEventListener('hashchange',function(){showTab(tabFromHash(),true);});
+  showTab(tabFromHash(),true);
+}
+
+/* ---------- Diagramm ---------- */
+function hexA(hex,a){
+  hex=hex.trim();if(hex.charAt(0)!=='#')return hex;
+  var n=parseInt(hex.slice(1),16);return 'rgba('+(n>>16)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
+function drawChart(fan,N){
+  var cs=getComputedStyle(document.documentElement),acc=cs.getPropertyValue('--accent'),mut=cs.getPropertyValue('--muted').trim(),line=cs.getPropertyValue('--line').trim();
+  var labels=fan.map(function(_,i){return S.age+i;});
+  function col(i){return fan.map(function(f){return Math.round(f[i]);});}
+  var common={borderWidth:0,pointRadius:0,tension:0.15};
+  var ds=[
+    Object.assign({label:'Schlechte 10 %',data:col(0),fill:false},common),
+    Object.assign({label:'Gute 10 %',data:col(4),fill:'-1',backgroundColor:hexA(acc,0.16)},common),
+    Object.assign({label:'25 % Marke',data:col(1),fill:false},common),
+    Object.assign({label:'75 % Marke',data:col(3),fill:'-1',backgroundColor:hexA(acc,0.3)},common),
+    {label:'Median',data:col(2),fill:false,borderColor:acc.trim(),borderWidth:2.5,pointRadius:0,tension:0.15}
+  ];
+  if(chart){chart.destroy();}
+  Chart.defaults.color=mut;Chart.defaults.font.family="'IBM Plex Sans',system-ui,sans-serif";
+  chart=new Chart($('fan'),{type:'line',data:{labels:labels,datasets:ds},options:{
+    responsive:true,maintainAspectRatio:false,animation:false,
+    interaction:{mode:'index',intersect:false},
+    scales:{
+      y:{min:0,grid:{color:line},ticks:{callback:function(v){return v>=1e6?(v/1e6).toFixed(1)+' Mio':Math.round(v/1000)+' Tsd';}}},
+      x:{grid:{display:false},title:{display:true,text:'Alter'},ticks:{maxTicksLimit:12}}
+    },
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+chf(c.raw);}}}}
+  }});
+}
+['(prefers-color-scheme: dark)'].forEach(function(q){var m=matchMedia(q);if(m.addEventListener)m.addEventListener('change',schedule);});
+new MutationObserver(schedule).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+buildUI();buildProd();initProdControls();initDynControls();initTabs();initDyn();syncInputs();update();
+})();
+</script>
+
+</body></html>
